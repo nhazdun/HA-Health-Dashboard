@@ -2,6 +2,7 @@ import { h, clear } from './core/dom.js';
 import { CSS, P, ST } from './core/tokens.js';
 import { HaData } from './core/ha.js';
 import { SOURCES, sourceState, E } from './core/registry.js';
+import { cardDetail, loadCardSeries } from './core/card-detail.js';
 import { PAGES } from './pages/index.js';
 
 const VERSION = typeof __VERSION__ === 'string' ? __VERSION__ : 'dev';
@@ -27,6 +28,8 @@ class HealthHubCard extends HTMLElement {
       labFilter: 'opt',
       labQuery: '',
       open: null,
+      openCard: null,
+      room: 'bed',
       lag: 0,
       cell: [0, 3],
       corrWindow: 45,
@@ -62,11 +65,18 @@ class HealthHubCard extends HTMLElement {
       this.state.tick++;
       this._schedulePaint();
     }, 1000);
+    this._onKey = (ev) => {
+      if (ev.key !== 'Escape') return;
+      if (this.state.openCard) this.setState({ openCard: null });
+      else if (this.state.open) this.setState({ open: null });
+    };
+    window.addEventListener('keydown', this._onKey);
   }
 
   disconnectedCallback() {
     if (this._timer) window.clearInterval(this._timer);
     if (this._raf) cancelAnimationFrame(this._raf);
+    if (this._onKey) window.removeEventListener('keydown', this._onKey);
   }
 
   _mount() {
@@ -81,13 +91,33 @@ class HealthHubCard extends HTMLElement {
 
   setState(patch) {
     const pageChanged = patch.page && patch.page !== this.state.page;
+    const cardOpened = 'openCard' in patch && patch.openCard
+      && patch.openCard.key !== (this.state.openCard && this.state.openCard.key);
     Object.assign(this.state, patch);
     if (pageChanged) {
       this.state.open = null;
+      this.state.openCard = null;
+      this._loadedFor = null;
+      this._load();
+    }
+    if (cardOpened) this._loadCardSeries();
+    if (patch.room !== undefined && !pageChanged) {
       this._loadedFor = null;
       this._load();
     }
     this._schedulePaint(true);
+  }
+
+  /** Pull the recorder series behind whichever card the user just opened. */
+  async _loadCardSeries() {
+    const detail = this.state.openCard;
+    this._pageData.__cardSeries = undefined;
+    this._schedulePaint(true);
+    const result = await loadCardSeries(this.ctx, detail);
+    if (this.state.openCard && this.state.openCard.key === detail.key) {
+      this._pageData.__cardSeries = result;
+      this._schedulePaint(true);
+    }
   }
 
   get ctx() {
@@ -168,6 +198,9 @@ class HealthHubCard extends HTMLElement {
     if (this.state.open && page.drawer) {
       const drawer = page.drawer(ctx, this.state.open, pageData || {});
       if (drawer) this._root.appendChild(drawer);
+    }
+    if (this.state.openCard) {
+      this._root.appendChild(cardDetail(ctx, this.state.openCard));
     }
   }
 

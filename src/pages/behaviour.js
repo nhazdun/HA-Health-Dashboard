@@ -2,8 +2,8 @@ import { h } from '../core/dom.js';
 import { P } from '../core/tokens.js';
 import { entityCard, panel, banner, emptyState, legendRow } from '../core/ui.js';
 import { lineChart, laneChart } from '../charts/svg.js';
-import { dayKey } from '../core/ha.js';
-import { loadEvents } from '../core/events.js';
+import { dayKey, resample } from '../core/ha.js';
+import { loadEvents, eventsFor } from '../core/events.js';
 import { fmt, age, clockOf } from '../core/format.js';
 import { E } from '../core/registry.js';
 
@@ -34,15 +34,19 @@ export default {
   async load(ctx) {
     const { data } = ctx;
     const days = WEEKS * 7;
-    const [evts, iqosStats, padStats, stepStats, waterStats, camera] = await Promise.all([
+    const [evts, iqosStats, padStats, stepStats, waterStats, camera, posture, slouchHist] = await Promise.all([
       loadEvents(ctx, 24),
       data.stats([E.iqosToday, E.iqosPuffs].filter((id) => data.exists(id)), days, 'day', ['mean', 'max', 'state']),
       data.stats([E.padTimeDay, E.padStepsDay].filter((id) => data.exists(id)), days, 'day', ['mean', 'max']),
       data.stats([E.ouraSteps, E.phoneSteps].filter((id) => data.exists(id)), days, 'day', ['max', 'mean']),
       data.stats([E.waterToday].filter((id) => data.exists(id)), days, 'day', ['max', 'mean']),
       data.exists(E.camera) ? data.history(E.camera, 24, { significantOnly: false }) : {},
+      data.exists(E.postureAngle)
+        ? data.series(E.postureAngle, 24, { significantOnly: false }) : Promise.resolve([]),
+      data.exists(E.slouching)
+        ? data.history(E.slouching, 24, { significantOnly: false }) : Promise.resolve({}),
     ]);
-    return { evts, iqosStats, padStats, stepStats, waterStats, camera, days };
+    return { evts, iqosStats, padStats, stepStats, waterStats, camera, posture, slouchHist, days };
   },
 
   render(ctx, pd) {
@@ -112,13 +116,29 @@ export default {
     const pct = slouch !== null && upright !== null && slouch + upright > 0
       ? (slouch / (slouch + upright)) * 100 : null;
     cards.push(entityCard(ctx, {
+      label: 'Кут постави', entity: E.postureAngle, dec: 1, unit: '°',
+      srcState: ctx.sourceState('upright').state,
+      ranges: { refMin: 0, refMax: 45, optMin: 0, optMax: 10 },
+      delta: 'оптимум 0–10°',
+      deltaColor: (data.val(E.postureAngle) ?? 0) > 10 ? P.warn : P.good,
+      source: 'Upright GO 2',
+    }));
+    cards.push(entityCard(ctx, {
       label: 'Час згорблено', value: pct, text: fmt(pct, 1), unit: '%',
       srcState: pct === null ? 'empty' : ctx.sourceState('upright').state,
       entity: E.slouchTime,
       ranges: { refMin: 0, refMax: 100, optMin: 0, optMax: 20 },
-      delta: pct === null ? '' : `${fmt(slouch, 1)} з ${fmt(slouch + upright, 1)} хв`,
+      delta: pct === null ? '' : `${fmt(slouch, 1)} згорблено / ${fmt(upright, 1)} рівно, хв`,
       deltaColor: pct > 30 ? P.warn : P.good,
       source: 'Upright GO 2',
+    }));
+    cards.push(entityCard(ctx, {
+      label: 'Рух', entity: E.movement,
+      text: movementLabel(data.raw(E.movement)), size: '22px', unit: '',
+      srcState: ctx.sourceState('upright').state,
+      delta: 'проксі до сидячого часу',
+      source: 'Upright GO 2',
+      emptyHint: 'датчик руху ще не віддав стан',
     }));
 
     const camMin = cameraMinutes(pd.camera[E.camera] || []);
@@ -143,6 +163,36 @@ export default {
 
     out.push(h('div.hh-cards', cards));
 
+    // ----------------------------------------------------- posture over the day
+    const postureVals = (pd.posture || []).map((p) => p.v);
+    out.push(panel(
+      'Кут постави протягом дня',
+      pd.posture && pd.posture.length
+        ? 'Відхилення верхньої частини спини від вертикалі. Усе, що вище лінії 10°, рахується як '
+          + `згорбленість — сьогодні це ${pct === null ? '—' : fmt(pct, 1) + '%'} відстеженого часу. `
+          + `${pd.posture.length} записів із recorder’а за добу.`
+        : 'Ряд кута постави за добу порожній.',
+      'Upright GO 2 · градуси',
+      pd.posture && pd.posture.length >= 2
+        ? lineChart({
+          h: 210, yMin: 0,
+          yMax: Math.max(48, Math.ceil(Math.max(...postureVals) * 1.1)),
+          yTicks: [0, 10, 20, 30, 40],
+          xLabels: ['−24 год', '−18', '−12', '−6', 'зараз'],
+          series: [{
+            pts: resample(pd.posture, 120, Date.now() - 24 * 3600e3, Date.now()),
+            color: ctx.accent, w: 1.5, fill: true,
+          }],
+          thresholds: [
+            { v: 10, color: P.warn, label: 'поріг згорбленості 10°' },
+            { v: data.val(E.postureAngle) ?? 0, color: P.off, label: `зараз ${fmt(data.val(E.postureAngle), 1)}°` },
+          ],
+          events: eventsFor(pd.evts, Date.now() - 24 * 3600e3, Date.now(), ctx, ['meal', 'iqos']),
+          showEvents: ctx.state.annotations,
+        })
+        : emptyState('Датчик постави не дав ряду за останні 24 години.'),
+    ));
+
     // ---------------------------------------------------------- day ribbon
     const dayStart = startOfToday();
     const dayEnd = dayStart + 86400e3;
@@ -163,6 +213,7 @@ export default {
             { color: ctx.accent, label: 'їжа' },
             { color: P.good, label: 'доріжка' },
             { color: P.alert, label: 'IQOS / тривога' },
+            { color: P.olive, label: 'згорблено' },
             { color: P.ref, label: 'камера ноутбука' },
           ]),
         ])
@@ -240,6 +291,10 @@ export default {
 
 // ------------------------------------------------------------------ helpers
 
+function movementLabel(state) {
+  return { idle: 'спокій', moving: 'рух', unknown: '—' }[state] || (state || '—');
+}
+
 function startOfToday() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -257,20 +312,26 @@ function buildLanes(ctx, pd, dayStart, dayEnd) {
     .filter(([a, b]) => b >= dayStart && a <= dayEnd)
     .map(([a, b]) => [at(Math.max(a, dayStart)), at(Math.min(b, dayEnd))]);
 
-  const camRows = pd.camera[ctx.E.camera] || [];
-  const camSegs = [];
-  let onAt = null;
-  for (const r of camRows) {
-    if (r.s === 'on' && onAt === null) onAt = r.t;
-    if (r.s !== 'on' && onAt !== null) { camSegs.push([at(onAt), at(r.t)]); onAt = null; }
-  }
-  if (onAt !== null) camSegs.push([at(onAt), at(Date.now())]);
+  const onSegments = (rows, dayStartMs) => {
+    const segs = [];
+    let onAt = null;
+    for (const r of rows) {
+      if (r.s === 'on' && onAt === null) onAt = r.t;
+      if (r.s !== 'on' && onAt !== null) { segs.push([at(onAt), at(r.t)]); onAt = null; }
+    }
+    if (onAt !== null) segs.push([at(onAt), at(Date.now())]);
+    return segs.filter(([a, b]) => b > a);
+  };
+
+  const camSegs = onSegments(pd.camera[ctx.E.camera] || []);
+  const slouchSegs = onSegments((pd.slouchHist || {})[ctx.E.slouching] || []);
 
   return [
     { label: 'Їжа', segs: pick('meal'), color: ctx.accent },
     { label: 'Доріжка', segs: sessions, color: P.good },
     { label: 'IQOS', segs: pick('iqos'), color: P.alert },
-    { label: 'Камера ноутбука', segs: camSegs.filter(([a, b]) => b > a), color: P.ref },
+    { label: 'Згорблено', segs: slouchSegs, color: P.olive },
+    { label: 'Камера ноутбука', segs: camSegs, color: P.ref },
     { label: 'Тривоги', segs: pick('alert'), color: P.alert },
   ];
 }

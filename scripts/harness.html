@@ -109,6 +109,19 @@ for (const [k, v] of Object.entries(dyson)) add(`sensor.dyson_5jb_eu_uka2805a_${
 // --- behaviour
 add('sensor.walkingpad_current_speed', 0, {}, 12 * 60e3);
 add('sensor.walkingpad_state', 'standby', {}, 12 * 60e3);
+// --- controls
+add('switch.walkingpad_belt', 'off', {}, 12 * 60e3);
+add('binary_sensor.walkingpad_connected', 'on', {}, 12 * 60e3);
+add('number.walkingpad_speed', 0, { min: 0.5, max: 6, step: 0.1, unit_of_measurement: 'km/h' }, 12 * 60e3);
+add('number.upright_go_2_posture_sensitivity', 4, { min: 1, max: 6, step: 1 }, 9 * 60e3);
+add('number.upright_go_2_vibration_delay', 3, { min: 0, max: 255, step: 1, unit_of_measurement: 's' }, 9 * 60e3);
+add('select.nh_health_upright_go_2_mode', 'posture', { options: ['posture', 'msk'] }, 9 * 60e3);
+add('button.upright_go_2_calibrate', 'unknown', {}, 9 * 60e3);
+add('binary_sensor.upright_go_2_slouching', 'off', {}, 9 * 60e3);
+add('sensor.nh_health_upright_go_2_movement', 'idle', { options: ['idle', 'moving', 'unknown'] }, 9 * 60e3);
+add('input_button.sleep', 'unknown', {}, 3600e3);
+add('input_datetime.sleep_anchor', '2026-08-05 00:00:00', {}, 3600e3);
+add('input_text.foodwatch_eaten_slots', '2026-08-06|obid,vecheria', {}, 3 * 3600e3);
 add('sensor.living_room_hn_walking_pad_kroki_za_den', 5043, {}, 12 * 60e3);
 add('sensor.living_room_hn_walking_pad_trivalist_za_den', 1.55, {}, 12 * 60e3);
 add('sensor.living_room_hn_walking_pad_vidstan_za_den', 3.38, {}, 12 * 60e3);
@@ -264,6 +277,7 @@ function fakeStats(msg) {
   return out;
 }
 
+const serviceCalls = [];
 const hass = {
   states,
   language: 'uk',
@@ -272,12 +286,20 @@ const hass = {
     if (msg.type === 'recorder/statistics_during_period') return fakeStats(msg);
     return {};
   },
+  // record instead of dispatching, so control wiring can be asserted offline
+  callService: async (domain, service, data) => {
+    serviceCalls.push({ domain, service, data });
+    return true;
+  },
 };
+window.__calls = () => serviceCalls;
 
-// Import through a blob URL so the module cache can never serve a stale build.
-const bundleSrc = await fetch('../dist/health-hub-card.js?probe=' + Date.now(), { cache: 'reload' })
-  .then((r) => r.text());
-await import(URL.createObjectURL(new Blob([bundleSrc], { type: 'text/javascript' })));
+// `npm run build` writes harness.built.html with the bundle spliced in below,
+// so the page under test is always exactly the build that was just produced.
+// Open harness.built.html, not this file.
+// ---8<--- BUNDLE ---8<---
+await import('../dist/health-hub-card.js?v=' + Date.now());
+// ---8<--- /BUNDLE ---8<---
 const card = document.getElementById('card');
 card.setConfig({ type: 'custom:health-hub-card' });
 card.hass = hass;

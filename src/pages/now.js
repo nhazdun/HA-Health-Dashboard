@@ -4,6 +4,7 @@ import { entityCard, panel, banner, emptyState, legendRow } from '../core/ui.js'
 import { lineChart, spark } from '../charts/svg.js';
 import { resample } from '../core/ha.js';
 import { loadEvents, eventsFor } from '../core/events.js';
+import { controlPanel, nowControls } from '../core/controls.js';
 import { fmt, age, hhmm, clockOf } from '../core/format.js';
 import { E } from '../core/registry.js';
 
@@ -65,6 +66,10 @@ export default {
         P.warn));
     }
 
+    // --------------------------------------------------------------- controls
+    const controls = controlPanel(ctx, nowControls(ctx));
+    if (controls) out.push(controls);
+
     // ----------------------------------------------------------------- cards
     const cards = [];
     const gluDead = cgm.state === 'dead' || cgm.state === 'stale';
@@ -117,12 +122,13 @@ export default {
     }));
 
     const padTime = data.val(E.padTimeDay);
+    const padRunning = data.raw(E.padBelt) === 'on' || data.raw(E.padState) === 'running';
     cards.push(entityCard(ctx, {
       label: 'Доріжка сьогодні', entity: E.padTimeDay, dec: 2, unit: 'год',
       srcState: ctx.sourceState('kingsmith').state,
       delta: `${fmt(data.val(E.padStepsDay), 0)} кроків · ${fmt(data.val(E.padDistDay), 2)} км\n`
         + `швидкість ${fmt(data.val(E.padSpeed), 1)} км/год`,
-      deltaColor: padTime > 0.5 ? P.good : P.off,
+      deltaColor: padRunning ? P.good : (padTime > 0.5 ? P.good : P.off),
       source: 'KingSmith · 5 с',
     }));
 
@@ -137,10 +143,12 @@ export default {
       source: 'Upright GO 2',
     }));
 
+    // Named by room, not by device: the bedroom carries two sensors, the
+    // living room one, and that asymmetry is the point.
     [
-      ['PM2.5 · спальня', E.bedPm25, 'Qingping 7fc5', 'qp_bed'],
-      ['PM2.5 · робоче', E.deskPm25, 'Qingping 554b', 'qp_desk'],
-      ['PM2.5 · Dyson', E.dysonPm25, 'Dyson · лазер', 'dyson'],
+      ['PM2.5 · спальня', E.bedPm25, 'Qingping 7fc5 · спальня', 'qp_bed'],
+      ['PM2.5 · вітальня', E.deskPm25, 'Qingping 554b · робоче місце', 'qp_desk'],
+      ['PM2.5 · спальня, Dyson', E.dysonPm25, 'Dyson лазер · спальня', 'dyson'],
     ].forEach(([label, id, src, key]) => {
       const v = data.val(id);
       cards.push(entityCard(ctx, {
@@ -239,10 +247,11 @@ export default {
 
     const anyPm = pd.pmBed.length || pd.pmDesk.length || pd.pmDyson.length;
     out.push(panel(
-      'PM2.5 — три сенсори на одній осі',
-      'Розбіжність між приладами показана, а не згладжена: коли одна крива йде вгору без інших, '
-      + 'джерело локальне.',
-      'спальня · робоче · Dyson',
+      'PM2.5 в обох кімнатах',
+      'Дві кімнати, три прилади: у спальні стоять Qingping і Dyson, у вітальні — лише Qingping. '
+      + 'Розходження двох приладів у спальні — це окрема метрика, а не шум, який треба сховати; '
+      + 'пік у вітальні підтвердити нічим.',
+      'спальня · вітальня · спальня Dyson',
       anyPm
         ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } }, [
           lineChart({
@@ -265,9 +274,9 @@ export default {
             showEvents: ctx.state.annotations,
           }),
           legendRow([
-            { color: ctx.accent, label: 'спальня Qingping 7fc5' },
-            { color: P.olive, label: 'робоче Qingping 554b' },
-            { color: P.ref, label: 'Dyson лазер' },
+            { color: ctx.accent, label: 'спальня · Qingping 7fc5' },
+            { color: P.olive, label: 'вітальня · Qingping 554b' },
+            { color: P.ref, label: 'спальня · Dyson лазер' },
           ]),
         ])
         : emptyState('Жоден з трьох сенсорів не віддав ряд PM2.5.'),

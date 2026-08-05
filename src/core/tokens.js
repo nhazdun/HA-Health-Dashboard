@@ -129,6 +129,47 @@ export const CSS = `
 .hh-bar .opt{top:4px;height:7px;background:${P.bandOpt};border-radius:2px}
 .hh-bar .mark{top:0;width:2px;height:15px;border-radius:1px;box-shadow:0 0 0 2px ${P.surf}}
 
+.hh-card.is-clickable{cursor:pointer;transition:border-color .15s}
+.hh-card.is-clickable:hover{border-color:${P.off}}
+.hh-card.is-clickable:focus-visible{outline:2px solid ${P.self};outline-offset:2px}
+
+/* ---------- device controls ---------- */
+.hh-ctl{background:${P.surf};border:1px solid ${P.rule};border-radius:14px;padding:15px 17px;
+  display:flex;flex-direction:column;gap:12px;box-shadow:0 1px 3px rgba(120,60,50,.06)}
+.hh-ctl .hd{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.hh-ctl .hd .t{font-size:12.5px;font-weight:600}
+.hh-ctl .hd .s{display:flex;align-items:center;gap:6px;font-family:${MONO};font-size:10.5px;
+  white-space:nowrap}
+.hh-ctl .nt{font-size:10.5px;line-height:1.5;color:${P.off}}
+.hh-ctl input[type=range]{accent-color:var(--hh-accent)}
+.hh-ctl-btn{border:1px solid ${P.rule};border-radius:8px;padding:9px 15px;font-family:inherit;
+  font-size:12.5px;font-weight:500;cursor:pointer;align-self:flex-start;
+  box-shadow:0 1px 2px rgba(120,60,50,.06);transition:opacity .15s}
+.hh-ctl-btn:hover:not(:disabled){opacity:.88}
+.hh-step{display:flex;align-items:center;justify-content:space-between;background:${P.bg};
+  border:1px solid ${P.rule};border-radius:9px;padding:5px 6px}
+.hh-step span{font-family:${MONO};font-size:12.5px;color:${P.ink}}
+.hh-step button{background:${P.surf};border:1px solid ${P.rule};border-radius:7px;width:32px;height:28px;
+  cursor:pointer;color:${P.ink2};font-size:15px;line-height:1}
+.hh-step button:hover{border-color:${P.off}}
+
+/* ---------- card detail modal ---------- */
+.hh-modal{width:min(620px,94vw);max-height:88vh;overflow-y:auto;background:${P.surf};
+  border:1px solid ${P.rule};border-radius:16px;padding:26px 28px;display:flex;flex-direction:column;
+  gap:18px;box-shadow:0 12px 40px rgba(120,60,50,.14)}
+.hh-modal .dh{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.hh-modal .dh b{font-size:18px;font-weight:600;letter-spacing:-.02em}
+
+/* ---------- room switcher ---------- */
+.hh-rooms{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.hh-seg{display:flex;align-items:center;gap:2px;background:${P.surf};border:1px solid ${P.rule};
+  border-radius:10px;padding:3px;box-shadow:0 1px 2px rgba(120,60,50,.05)}
+.hh-seg button{background:transparent;border:none;border-radius:8px;padding:8px 16px;cursor:pointer;
+  font-family:inherit;font-size:12.5px;color:${P.mut}}
+.hh-seg button:hover{background:${P.s3}}
+.hh-seg button[aria-pressed="true"]{background:${P.s3};color:${P.ink};font-weight:600}
+.hh-roomnote{font-size:11.5px;line-height:1.55;color:${P.mut};max-width:70ch}
+
 /* ---------- chart panel ---------- */
 .hh-panel{background:${P.surf};border:1px solid ${P.rule};border-radius:14px;padding:18px 20px 16px;
   display:flex;flex-direction:column;gap:14px;box-shadow:0 1px 3px rgba(120,60,50,.06)}
@@ -238,6 +279,7 @@ svg{display:block;width:100%;overflow:visible}
   padding-top:10px}
 
 @media (max-width:1100px){.hh-corr{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none !important}}
 @media (max-width:860px){
   .hh-root{flex-direction:column}
   .hh-aside{width:100%;flex:none;height:auto;position:static;border-right:none;

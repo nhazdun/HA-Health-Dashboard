@@ -140,24 +140,96 @@ export default {
       source: 'SD ÷ середнє',
     }));
 
+    // ------------------------------------------------------------- nutrition
+    // Foodwatch is the *actual* intake; Foodie is the plan. Only the actual
+    // correlates with the CGM, so plan figures are shown as a comparison and
+    // never substituted for fact.
+    const fw = ctx.sourceState('foodwatch');
+    const kcal = data.val(E.fwKcal);
+    const carbs = data.val(E.fwCarbs);
+    const protein = data.val(E.fwProtein);
+    const fat = data.val(E.fwFat);
+    const plan = planMacros(data);
+    const weight = data.val(E.wWeight);
+
     cards.push(entityCard(ctx, {
-      label: 'Вуглеводи, факт', entity: E.fwCarbs, dec: 0, unit: 'г',
-      srcState: ctx.sourceState('foodwatch').state,
-      delta: `${fmt(data.val(E.fwKcal), 0)} ккал · Б ${fmt(data.val(E.fwProtein), 0)} · Ж ${fmt(data.val(E.fwFat), 0)}`,
+      label: 'Калорії зʼїдено', entity: E.fwKcal, dec: 0, unit: 'ккал',
+      srcState: fw.state,
+      delta: plan.kcal ? `план ${fmt(plan.kcal, 0)} ккал` : '',
+      source: 'Foodwatch · факт',
+      note: eatenSlots(data),
+    }));
+    cards.push(entityCard(ctx, {
+      label: 'Вуглеводи зʼїдено', entity: E.fwCarbs, dec: 0, unit: 'г',
+      srcState: fw.state,
+      ranges: { refMin: 0, refMax: 400, optMin: 90, optMax: 200 },
+      delta: [
+        plan.carbs ? `план ${fmt(plan.carbs, 0)} г` : null,
+        kcal ? `${fmt(((carbs * 4) / kcal) * 100, 0)}% енергії` : null,
+      ].filter(Boolean).join(' · '),
+      deltaColor: P.warn,
+      source: 'Foodwatch · факт',
+    }));
+    cards.push(entityCard(ctx, {
+      label: 'Білок зʼїдено', entity: E.fwProtein, dec: 0, unit: 'г',
+      srcState: fw.state,
+      ranges: { refMin: 0, refMax: 250, optMin: 110, optMax: 160 },
+      delta: [
+        plan.protein ? `план ${fmt(plan.protein, 0)} г` : null,
+        weight && protein ? `${fmt(protein / weight, 1)} г/кг` : null,
+      ].filter(Boolean).join(' · '),
+      deltaColor: weight && protein && protein / weight >= 1.4 ? P.good : P.warn,
+      source: 'Foodwatch · факт',
+    }));
+    cards.push(entityCard(ctx, {
+      label: 'Жир зʼїдено', entity: E.fwFat, dec: 0, unit: 'г',
+      srcState: fw.state,
+      ranges: { refMin: 0, refMax: 200, optMin: 60, optMax: 100 },
+      delta: [
+        plan.fat ? `план ${fmt(plan.fat, 0)} г` : null,
+        kcal ? `${fmt(((fat * 9) / kcal) * 100, 0)}% енергії` : null,
+      ].filter(Boolean).join(' · '),
       source: 'Foodwatch · факт',
     }));
 
-    const plan = planCarbs(data);
+    const last = lastMeal(data);
+    cards.push(entityCard(ctx, {
+      label: 'Останній прийом', entity: E.fwLastMeal,
+      value: last.kcal, text: last.kcal !== null ? fmt(last.kcal, 0) : '—', unit: 'ккал',
+      srcState: last.kcal === null ? 'empty' : fw.state,
+      ageText: last.stamp || '—',
+      delta: last.name ? `${last.name}\n${last.macros}` : '',
+      source: 'Foodwatch · єдиний таймстемп їжі',
+      emptyHint: 'останній прийом не описаний',
+    }));
+
     cards.push(entityCard(ctx, {
       label: 'Найвуглеводніша позиція плану',
-      value: plan ? plan.carbs : null, text: plan ? String(plan.carbs) : '—',
+      value: plan.top ? plan.top.carbs : null, text: plan.top ? String(plan.top.carbs) : '—',
       unit: 'г вуглеводів', size: '22px',
-      srcState: plan ? ctx.sourceState('foodie').state : 'empty',
+      srcState: plan.top ? ctx.sourceState('foodie').state : 'empty',
       ageText: data.raw(E.foodieDate) || '—',
-      delta: plan ? plan.name.slice(0, 60) : '',
+      delta: plan.top ? plan.top.name.slice(0, 60) : '',
       deltaColor: P.warn,
       source: 'Foodie · OCR',
       entity: E.foodieDate,
+    }));
+
+    const diff = plan.kcal !== null && kcal !== null ? kcal - plan.kcal : null;
+    cards.push(entityCard(ctx, {
+      label: 'План проти факту',
+      value: diff, text: diff === null ? '—' : `${diff >= 0 ? '+' : '−'}${fmt(Math.abs(diff), 0)}`,
+      unit: 'ккал',
+      srcState: diff === null ? 'empty' : fw.state,
+      ageText: data.raw(E.foodieDate) || '—',
+      delta: diff === null ? '' : [
+        macroDiff('вуглеводи', carbs, plan.carbs),
+        macroDiff('білок', protein, plan.protein),
+        macroDiff('жир', fat, plan.fat),
+      ].filter(Boolean).join(' · '),
+      source: 'план Foodie → факт Foodwatch',
+      note: 'з CGM корелює факт, а не план',
+      emptyHint: 'немає обох боків порівняння',
     }));
 
     out.push(h('div.hh-cards', cards));
@@ -467,18 +539,71 @@ function ageOfOrn(data, id) {
   return at ? age(Date.now() - new Date(at).getTime()) : '—';
 }
 
-function planCarbs(data) {
-  let best = null;
+/**
+ * Sum the Foodie plan for the day out of its five free-text slots, and find
+ * the single highest-carbohydrate item. Each slot reads like
+ * "Гречка, яловічі болі — 480 ккал, Б 38г, Ж 18г, В 48г".
+ */
+function planMacros(data) {
+  const out = { kcal: null, protein: null, fat: null, carbs: null, top: null };
+  const add = (key, v) => { if (Number.isFinite(v)) out[key] = (out[key] ?? 0) + v; };
+  const grab = (txt, re) => {
+    const m = re.exec(txt);
+    return m ? Number(String(m[1]).replace(',', '.')) : null;
+  };
   for (const id of E.foodieMeals) {
     const txt = data.raw(id);
     if (!txt) continue;
-    const m = /В\s*(\d+)\s*г/i.exec(txt);
-    if (!m) continue;
-    const carbs = Number(m[1]);
-    if (!Number.isFinite(carbs)) continue;
-    if (!best || carbs > best.carbs) best = { carbs, name: txt.split('—')[0].trim() };
+    add('kcal', grab(txt, /(\d+(?:[.,]\d+)?)\s*ккал/i));
+    add('protein', grab(txt, /Б\s*(\d+(?:[.,]\d+)?)\s*г/i));
+    add('fat', grab(txt, /Ж\s*(\d+(?:[.,]\d+)?)\s*г/i));
+    const c = grab(txt, /В\s*(\d+(?:[.,]\d+)?)\s*г/i);
+    add('carbs', c);
+    if (Number.isFinite(c) && (!out.top || c > out.top.carbs)) {
+      out.top = { carbs: c, name: txt.split('—')[0].trim() };
+    }
   }
-  return best;
+  return out;
+}
+
+function macroDiff(label, actual, planned) {
+  if (!Number.isFinite(actual) || !Number.isFinite(planned)) return null;
+  const d = actual - planned;
+  return `${label} ${d >= 0 ? '+' : '−'}${fmt(Math.abs(d), 0)} г`;
+}
+
+/** Parse the Foodwatch last-meal text: "05.08 21:19 · Назва — 238 ккал, Б 38г…" */
+function lastMeal(data) {
+  const txt = data.raw(E.fwLastMeal);
+  if (!txt) return { kcal: null, name: '', macros: '', stamp: null };
+  const stampMatch = /^(\d{2}\.\d{2}\s+\d{2}:\d{2})/.exec(txt);
+  const afterDot = txt.includes('·') ? txt.slice(txt.indexOf('·') + 1) : txt;
+  const name = afterDot.split('—')[0].replace(/\([^)]*\)/g, '').trim();
+  const num = (re) => {
+    const m = re.exec(txt);
+    return m ? Number(String(m[1]).replace(',', '.')) : null;
+  };
+  const p = num(/Б\s*(\d+(?:[.,]\d+)?)\s*г/i);
+  const f = num(/Ж\s*(\d+(?:[.,]\d+)?)\s*г/i);
+  const c = num(/В\s*(\d+(?:[.,]\d+)?)\s*г/i);
+  return {
+    kcal: num(/(\d+(?:[.,]\d+)?)\s*ккал/i),
+    name,
+    macros: [p !== null ? `Б ${fmt(p, 0)}` : null, f !== null ? `Ж ${fmt(f, 0)}` : null,
+      c !== null ? `В ${fmt(c, 0)}` : null].filter(Boolean).join(' · '),
+    stamp: stampMatch ? stampMatch[1] : null,
+  };
+}
+
+/** Which meal slots Foodwatch has already logged today. */
+function eatenSlots(data) {
+  const raw = data.raw(E.fwSlots);
+  if (!raw || !raw.includes('|')) return null;
+  const [day, list] = raw.split('|');
+  const today = new Date().toISOString().slice(0, 10);
+  if (day !== today) return 'сьогодні ще нічого не залоговано';
+  const n = list.split(',').filter(Boolean).length;
+  return n ? `залоговано слотів: ${n}` : 'сьогодні ще нічого не залоговано';
 }
 
 /**

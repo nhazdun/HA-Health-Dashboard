@@ -1,12 +1,17 @@
 import { num } from './format.js';
 
 /**
- * Read-only access layer over the Home Assistant websocket connection that the
- * Lovelace `hass` object already carries.
+ * Access layer over the Home Assistant websocket connection that the Lovelace
+ * `hass` object already carries.
  *
- * Nothing here writes: no service calls, no recorder mutation. The card only
- * ever issues `history/history_during_period` and
- * `recorder/statistics_during_period`, both of which are pure reads.
+ * Reads are the bulk of it: entity state plus `history/history_during_period`
+ * and `recorder/statistics_during_period`, which are pure queries. Nothing
+ * here ever mutates the recorder, so existing history is never at risk.
+ *
+ * `call()` is the one write path, and it exists only for the explicit device
+ * controls on the Now and Night pages — starting the treadmill, calibrating
+ * the posture sensor, marking a sleep session. It calls ordinary HA services;
+ * it does not touch stored data.
  */
 export class HaData {
   constructor() {
@@ -92,6 +97,72 @@ export class HaData {
   byPrefix(prefix) {
     if (!this.hass || !this.hass.states) return [];
     return Object.keys(this.hass.states).filter((id) => id.startsWith(prefix));
+  }
+
+  /** Numeric bounds a `number` entity declares, so sliders never invent a range. */
+  bounds(entityId, fallback = {}) {
+    const s = this.st(entityId);
+    const a = (s && s.attributes) || {};
+    return {
+      min: Number.isFinite(a.min) ? a.min : (fallback.min ?? 0),
+      max: Number.isFinite(a.max) ? a.max : (fallback.max ?? 100),
+      step: Number.isFinite(a.step) ? a.step : (fallback.step ?? 1),
+      unit: a.unit_of_measurement || fallback.unit || '',
+    };
+  }
+
+  // --------------------------------------------------------------- controls
+
+  /**
+   * Call a Home Assistant service. The only write the card performs, and only
+   * from a control the user pressed. Returns true on success.
+   */
+  async call(domain, service, data) {
+    if (!this.hass || !this.hass.callService) return false;
+    try {
+      await this.hass.callService(domain, service, data);
+      return true;
+    } catch (err) {
+      console.warn('[health-hub] service call failed', `${domain}.${service}`, err);
+      return false;
+    }
+  }
+
+  /** Press a `button` / `input_button` entity. */
+  press(entityId) {
+    const domain = entityId.split('.')[0];
+    return this.call(domain, 'press', { entity_id: entityId });
+  }
+
+  /** Set a `number` / `input_number` entity, clamped to its declared bounds. */
+  setNumber(entityId, value) {
+    const { min, max, step } = this.bounds(entityId);
+    let v = Math.min(max, Math.max(min, value));
+    if (step) v = Math.round(v / step) * step;
+    v = Number(v.toFixed(4));
+    const domain = entityId.split('.')[0];
+    return this.call(domain, 'set_value', { entity_id: entityId, value: v });
+  }
+
+  toggle(entityId, on) {
+    const domain = entityId.split('.')[0];
+    return this.call(domain, on ? 'turn_on' : 'turn_off', { entity_id: entityId });
+  }
+
+  selectOption(entityId, option) {
+    const domain = entityId.split('.')[0];
+    return this.call(domain, 'select_option', { entity_id: entityId, option });
+  }
+
+  /** Write "now" into an input_datetime, used to anchor a sleep session. */
+  setDateTimeNow(entityId) {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return this.call('input_datetime', 'set_datetime', {
+      entity_id: entityId,
+      datetime: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} `
+        + `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`,
+    });
   }
 
   // --------------------------------------------------------------- history

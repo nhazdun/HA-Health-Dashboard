@@ -4,6 +4,7 @@ import { entityCard, panel, banner, emptyState, legendRow } from '../core/ui.js'
 import { lineChart, stackChart } from '../charts/svg.js';
 import { resample, dayKey } from '../core/ha.js';
 import { loadEvents, eventsFor } from '../core/events.js';
+import { controlPanel, sleepControls } from '../core/controls.js';
 import { fmt, age, hhmm, clockOf, median } from '../core/format.js';
 import { E } from '../core/registry.js';
 
@@ -70,6 +71,10 @@ export default {
         'ЕЕГ-канал Muse недоступний — залишається лише акселерометрична оцінка Oura. '
         + 'Порівняння Bland–Altman (E12) без другого джерела неможливе.', P.warn));
     }
+
+    // --------------------------------------------------------------- control
+    const sleep = controlPanel(ctx, sleepControls(ctx));
+    if (sleep) out.push(sleep);
 
     // ----------------------------------------------------------------- cards
     const cards = [];

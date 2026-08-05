@@ -76,10 +76,15 @@ export function card(o) {
     ]),
   ];
 
+  if (o.onClick) cls.push('is-clickable');
   return h('div', {
     class: cls.join(' '),
-    style: o.onClick ? { cursor: 'pointer' } : null,
+    tabindex: o.onClick ? '0' : null,
+    role: o.onClick ? 'button' : null,
     onClick: o.onClick || null,
+    onKeydown: o.onClick
+      ? (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); o.onClick(); } }
+      : null,
   }, kids);
 }
 
@@ -141,16 +146,37 @@ export function entityCard(ctx, spec) {
 
   const text = spec.text !== undefined ? spec.text : (v === null ? '—' : fmt(v, spec.dec));
   const ageMs = spec.ageMs !== undefined ? spec.ageMs : (id ? data.ageMs(id) : null);
+  const unit = state === 'empty' ? '' : (spec.unit ?? (id ? data.unit(id) : ''));
+  const ageText = spec.ageText || (ageMs === null ? '—' : age(ageMs));
+
+  // Every card opens a detail view showing the recorder series behind it and
+  // the four facts that decide whether the number can be trusted.
+  const detail = {
+    key: `${spec.label}|${id || 'derived'}`,
+    label: spec.label,
+    entity: id || null,
+    value: text,
+    unit,
+    delta: state === 'empty' ? (spec.emptyDelta || '') : spec.delta,
+    source: spec.source,
+    note: noteOverride,
+    state,
+    ageText,
+    color: spec.color || P.ink,
+    bar,
+    markColor,
+    ranges,
+  };
 
   return card({
     label: spec.label,
     value: text,
-    unit: state === 'empty' ? '' : (spec.unit ?? (id ? data.unit(id) : '')),
+    unit,
     size: spec.size,
     span: spec.span,
     state,
-    ageText: spec.ageText || (ageMs === null ? '—' : age(ageMs)),
-    delta: state === 'empty' ? (spec.emptyDelta || '') : spec.delta,
+    ageText,
+    delta: detail.delta,
     deltaColor: spec.deltaColor,
     spark: state === 'empty' ? null : spec.spark,
     bar,
@@ -159,7 +185,7 @@ export function entityCard(ctx, spec) {
     source: spec.source,
     note: noteOverride,
     noteColor: spec.noteColor,
-    onClick: spec.onClick,
+    onClick: spec.onClick || (() => ctx.setState({ openCard: detail })),
   });
 }
 

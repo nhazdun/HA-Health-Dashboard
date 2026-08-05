@@ -340,6 +340,8 @@ export const E = {
   padTimeDay: 'sensor.living_room_hn_walking_pad_trivalist_za_den',
   padDistDay: 'sensor.living_room_hn_walking_pad_vidstan_za_den',
   padBelt: 'switch.walkingpad_belt',
+  padSpeedSet: 'number.walkingpad_speed',
+  padConnected: 'binary_sensor.walkingpad_connected',
 
   bedTemp: 'sensor.cgllc_cgs2_7fc5_temperature',
   bedCo2: 'sensor.cgllc_cgs2_7fc5_co2_density',
@@ -367,7 +369,9 @@ export const E = {
   dysonOutdoor: 'sensor.dyson_5jb_eu_uka2805a_outdoor_aqi',
   dysonDominant: 'sensor.dyson_5jb_eu_uka2805a_dominant_pollutant',
   dysonTemp: 'sensor.dyson_5jb_eu_uka2805a_temperature',
+  dysonHumidity: 'sensor.dyson_5jb_eu_uka2805a_humidity',
   dysonFilter: 'sensor.dyson_5jb_eu_uka2805a_hepa_filter_life',
+  dysonNextClean: 'sensor.dyson_5jb_eu_uka2805a_duration',
 
   waterToday: 'sensor.h2o00008374_water_today',
   sipsToday: 'sensor.h2o00008374_sips_today',
@@ -404,6 +408,12 @@ export const E = {
   slouchTime: 'sensor.nh_health_upright_go_2_slouching_time',
   uprightTime: 'sensor.nh_health_upright_go_2_upright_time',
   slouching: 'binary_sensor.upright_go_2_slouching',
+  movement: 'sensor.nh_health_upright_go_2_movement',
+  postureCalibrate: 'button.upright_go_2_calibrate',
+  postureSensitivity: 'number.upright_go_2_posture_sensitivity',
+  vibrationDelay: 'number.upright_go_2_vibration_delay',
+  postureMode: 'select.nh_health_upright_go_2_mode',
+  sleepButton: 'input_button.sleep',
 
   camera: 'binary_sensor.macbook_nh_camera_in_use',
   frontApp: 'sensor.macbook_nh_frontmost_app',

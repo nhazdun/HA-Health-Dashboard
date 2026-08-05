@@ -1,7 +1,29 @@
 import { build, context } from 'esbuild';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+
+/**
+ * Write the offline harness with the bundle inlined.
+ *
+ * The harness used to `import()` dist/ as a sub-resource, and a stale cached
+ * copy once hid two whole missing panels for several rounds of debugging.
+ * Inlining removes the sub-resource entirely: the page you load is the build
+ * you just made, with nothing in between that can serve something older.
+ */
+function writeHarness() {
+  const shell = readFileSync(new URL('../scripts/harness.html', import.meta.url), 'utf8');
+  const bundle = readFileSync(new URL('../dist/health-hub-card.js', import.meta.url), 'utf8');
+  // A replacer *function* is required: the minified bundle contains `$&`
+  // sequences (a variable named `$` followed by `&&`), and a string
+  // replacement would expand those as "the matched substring", splicing the
+  // marker block back into the middle of the code.
+  const inlined = shell.replace(
+    /\/\/ ---8<--- BUNDLE ---8<---[\s\S]*?\/\/ ---8<--- \/BUNDLE ---8<---/,
+    () => `// ---8<--- BUNDLE ---8<---\n${bundle}\n// ---8<--- /BUNDLE ---8<---`,
+  );
+  writeFileSync(new URL('../scripts/harness.built.html', import.meta.url), inlined);
+}
 
 const options = {
   entryPoints: ['src/health-hub-card.js'],
@@ -27,4 +49,5 @@ if (process.argv.includes('--watch')) {
   console.log('watching…');
 } else {
   await build(options);
+  writeHarness();
 }
