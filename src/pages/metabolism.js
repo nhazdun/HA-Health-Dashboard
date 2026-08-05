@@ -64,6 +64,9 @@ export default {
       hist, evts, mealHistory,
       cvStats: cvStats[E.glucose] || [],
       ...analysis,
+      // These depend on the meal windows, so they can only be derived once the
+      // postprandial cut has run — analyse() alone cannot know about meals.
+      ...mealStats(meals),
       meals,
       dishes: rankDishes(meals),
       today: nutritionToday(data, mealHistory),
@@ -577,6 +580,37 @@ export function postprandial(hist, mealTimes, sessions) {
     });
   }
   return out;
+}
+
+/** Everything that can only be known once the meal windows have been cut. */
+function mealStats(meals) {
+  if (!meals.length) {
+    return { maxRise: null, maxRiseMeal: null, meanTimeToPeak: null, meanReturn: null, walkEffect: null };
+  }
+  const top = meals.reduce((a, b) => (b.rise > a.rise ? b : a));
+  const peaks = meals.map((m) => m.tPeak).filter(Number.isFinite);
+  const returns = meals.map((m) => m.returnH).filter(Number.isFinite);
+
+  // The walk effect needs both arms; with only one the comparison is meaningless.
+  const withWalk = meals.filter((m) => m.walked).map((m) => m.rise);
+  const without = meals.filter((m) => !m.walked).map((m) => m.rise);
+  let walkEffect = null;
+  if (withWalk.length >= 2 && without.length >= 2) {
+    const a = mean(withWalk), b = mean(without);
+    walkEffect = {
+      withMean: a, withoutMean: b,
+      withN: withWalk.length, withoutN: without.length,
+      pct: b ? ((a - b) / b) * 100 : 0,
+    };
+  }
+
+  return {
+    maxRise: top.rise,
+    maxRiseMeal: top,
+    meanTimeToPeak: peaks.length ? mean(peaks) : null,
+    meanReturn: returns.length ? mean(returns) : null,
+    walkEffect,
+  };
 }
 
 /** Aggregate meals into dishes, averaging repeats of the same name. */
