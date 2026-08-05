@@ -97,29 +97,29 @@ export function nowControls(ctx) {
 
   if (data.exists(E.padBelt) || data.exists(E.padSpeedSet)) {
     const running = data.raw(E.padBelt) === 'on' || data.raw(E.padState) === 'running';
-    const b = data.bounds(E.padSpeedSet, { min: 0.5, max: 6, step: 0.1, unit: 'км/год' });
+    const b = data.bounds(E.padSpeedSet, { min: 0.5, max: 6, step: 0.1, unit: 'km/h' });
     const setSpeed = data.val(E.padSpeedSet);
     const current = data.val(E.padSpeed);
     const connected = data.raw(E.padConnected) !== 'off';
     out.push({
-      title: 'Доріжка · KingSmith',
-      status: !connected ? 'немає звʼязку'
-        : running ? `рух ${fmt(current ?? setSpeed, 1)} ${b.unit}` : 'зупинена',
+      title: 'Treadmill · KingSmith',
+      status: !connected ? 'not connected'
+        : running ? `running at ${fmt(current ?? setSpeed, 1)} ${b.unit}` : 'stopped',
       stateColor: !connected ? P.off : running ? P.good : P.off,
       primary: {
-        label: running ? 'Зупинити' : 'Запустити',
+        label: running ? 'Stop' : 'Start',
         filled: !running,
         disabled: !connected,
         go: () => data.toggle(E.padBelt, !running),
       },
       sliders: data.exists(E.padSpeedSet) ? [{
-        label: 'Швидкість',
+        label: 'Speed',
         display: `${fmt(setSpeed, 1)} ${b.unit}`,
         min: b.min, max: b.max, step: b.step, value: setSpeed ?? b.min,
         disabled: !connected,
         go: (v) => data.setNumber(E.padSpeedSet, v),
       }] : [],
-      note: connected ? null : 'Пристрій не на звʼязку — команди не дійдуть.',
+      note: connected ? null : 'The device is offline, so a command will not reach it.',
     });
   }
 
@@ -127,29 +127,29 @@ export function nowControls(ctx) {
     const mode = data.raw(E.postureMode);
     const slouching = data.raw(E.slouching) === 'on';
     const sens = data.bounds(E.postureSensitivity, { min: 1, max: 6, step: 1 });
-    const delay = data.bounds(E.vibrationDelay, { min: 0, max: 255, step: 1, unit: 'с' });
+    const delay = data.bounds(E.vibrationDelay, { min: 0, max: 255, step: 1, unit: 's' });
     const delayVal = data.val(E.vibrationDelay);
     out.push({
       title: 'Upright GO 2',
-      status: mode ? (slouching ? `${mode} · згорблено` : `${mode} · рівно`) : 'не відстежує',
+      status: mode ? (slouching ? `${mode} · slouching` : `${mode} · upright`) : 'not tracking',
       stateColor: !mode ? P.off : slouching ? P.warn : P.good,
       primary: data.exists(E.postureCalibrate) ? {
-        label: 'Калібрувати поставу',
+        label: 'Calibrate posture',
         filled: false,
         go: () => data.press(E.postureCalibrate),
       } : null,
       sliders: data.exists(E.postureSensitivity) ? [{
-        label: 'Чутливість до нахилу',
+        label: 'Posture sensitivity',
         display: String(fmt(data.val(E.postureSensitivity), 0)),
         min: sens.min, max: sens.max, step: sens.step, value: data.val(E.postureSensitivity),
         go: (v) => data.setNumber(E.postureSensitivity, v),
       }] : [],
       steppers: data.exists(E.vibrationDelay) ? [{
-        label: 'Затримка вібрації',
-        display: `${fmt(delayVal, 0)} ${delay.unit || 'с'}`,
+        label: 'Vibration delay',
+        display: `${fmt(delayVal, 0)} ${delay.unit || 's'}`,
         go: (d) => data.setNumber(E.vibrationDelay, (delayVal ?? 0) + d * (delay.step || 1)),
       }] : [],
-      note: 'Калібрування задає нуль — тримайте спину рівно в момент натискання.',
+      note: 'Calibration sets the zero point. Hold your back straight as you press it.',
     });
   }
 
@@ -169,13 +169,13 @@ export function sleepControls(ctx) {
   const active = sinceMin !== null && sinceMin > 0 && sinceMin < 16 * 60;
 
   return [{
-    title: 'Сесія сну',
+    title: 'Sleep session',
     status: active
-      ? `почалась ${Math.floor(sinceMin / 60)}:${String(Math.floor(sinceMin % 60)).padStart(2, '0')} тому`
-      : 'не почата',
+      ? `started ${Math.floor(sinceMin / 60)}:${String(Math.floor(sinceMin % 60)).padStart(2, '0')} ago`
+      : 'not started',
     stateColor: active ? P.ref : P.off,
     primary: {
-      label: active ? 'Оновити якір' : 'Почати сон',
+      label: active ? 'Update anchor' : 'Start sleep',
       filled: !active,
       go: async () => {
         if (data.exists(E.sleepButton)) await data.press(E.sleepButton);
@@ -183,7 +183,7 @@ export function sleepControls(ctx) {
       },
     },
     note: data.exists(E.sleepButton)
-      ? 'Тисне input_button.sleep — той самий якір, який використовують автоматизації спальні.'
-      : 'Записує поточний час у якір сну.',
+      ? 'This presses input_button.sleep, the same anchor the bedroom automations use.'
+      : 'This writes the current time into the sleep anchor.',
   }];
 }

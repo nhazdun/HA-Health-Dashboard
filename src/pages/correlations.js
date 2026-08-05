@@ -20,31 +20,31 @@ import { E } from '../core/registry.js';
 const MIN_N = 20;
 
 const METRICS = [
-  { key: 'sleep', label: 'Сон', entity: E.ouraTotalSleep, agg: 'max', unit: 'год' },
-  { key: 'deep', label: 'Глибокий', entity: E.ouraDeep, agg: 'max', unit: 'год' },
-  { key: 'hrv', label: 'HRV', entity: E.ouraSleepHrv, agg: 'mean', unit: 'мс' },
-  { key: 'rhr', label: 'Пульс спокою', entity: E.ouraLowestHr, agg: 'min', unit: 'уд/хв' },
-  { key: 'glucose', label: 'Глюкоза', entity: E.glucose, agg: 'mean', unit: 'ммоль/л' },
-  { key: 'carbs', label: 'Вуглеводи', entity: E.fwCarbs, agg: 'max', unit: 'г' },
-  { key: 'bedT', label: 'T спальні', entity: E.bedTemp, agg: 'mean', unit: '°C' },
-  { key: 'co2', label: 'CO₂ спальні', entity: E.bedCo2, agg: 'max', unit: 'ppm' },
-  { key: 'pm25', label: 'PM2.5', entity: E.bedPm25, agg: 'max', unit: 'мкг/м³' },
-  { key: 'iqos', label: 'IQOS', entity: E.iqosToday, agg: 'max', unit: 'стиків' },
-  { key: 'pad', label: 'Доріжка', entity: E.padTimeDay, agg: 'max', unit: 'год' },
-  { key: 'steps', label: 'Кроки', entity: E.ouraSteps, agg: 'max', unit: 'кроків' },
+  { key: 'sleep', label: 'Sleep', entity: E.ouraTotalSleep, agg: 'max', unit: 'h' },
+  { key: 'deep', label: 'Deep', entity: E.ouraDeep, agg: 'max', unit: 'h' },
+  { key: 'hrv', label: 'HRV', entity: E.ouraSleepHrv, agg: 'mean', unit: 'ms' },
+  { key: 'rhr', label: 'Resting HR', entity: E.ouraLowestHr, agg: 'min', unit: 'bpm' },
+  { key: 'glucose', label: 'Glucose', entity: E.glucose, agg: 'mean', unit: 'mmol/L' },
+  { key: 'carbs', label: 'Carbs', entity: E.fwCarbs, agg: 'max', unit: 'g' },
+  { key: 'bedT', label: 'Bedroom T', entity: E.bedTemp, agg: 'mean', unit: '°C' },
+  { key: 'co2', label: 'Bedroom CO₂', entity: E.bedCo2, agg: 'max', unit: 'ppm' },
+  { key: 'pm25', label: 'PM2.5', entity: E.bedPm25, agg: 'max', unit: 'µg/m³' },
+  { key: 'iqos', label: 'IQOS', entity: E.iqosToday, agg: 'max', unit: 'sticks' },
+  { key: 'pad', label: 'Treadmill', entity: E.padTimeDay, agg: 'max', unit: 'h' },
+  { key: 'steps', label: 'Steps', entity: E.ouraSteps, agg: 'max', unit: 'steps' },
 ];
 
 export default {
   id: 'corr',
-  label: 'Кореляції',
-  title: 'Кореляції',
-  question: 'Що на що впливає?',
-  scale: 'доби · лаг',
+  label: 'Correlations',
+  title: 'Correlations',
+  question: 'What affects what?',
+  scale: 'days · lag',
 
   live(ctx) {
     const pd = ctx.pageData.corr;
-    if (!pd) return { color: P.ref, label: 'рахую…' };
-    return { color: P.ref, label: `${pd.days} діб у вікні · n на кожному висновку` };
+    if (!pd) return { color: P.ref, label: 'computing…' };
+    return { color: P.ref, label: `${pd.days} days in window · n on every claim` };
   },
 
   async load(ctx) {
@@ -88,7 +88,7 @@ export default {
     const M = pd.metrics;
 
     if (M.length < 2) {
-      return [emptyState('Замало метрик із денними агрегатами, щоб будувати матрицю.')];
+      return [emptyState('Too few metrics carry daily aggregates to build a matrix.')];
     }
 
     const coverage = M.map((m) => ({
@@ -97,12 +97,13 @@ export default {
     }));
     const thin = coverage.filter((c) => c.n < MIN_N);
 
-    out.push(banner('n НА КОЖНОМУ ВИСНОВКУ',
-      `Вікно ${pd.days} діб. Клітинки з n < ${MIN_N} лишаються порожніми, а не заповнюються сірою `
-      + 'майже-нульовою кореляцією. Повзунок лагу зсуває Y проти X: причина не може йти після наслідку. '
+    out.push(banner('n ON EVERY CLAIM',
+      `The window is ${pd.days} days. A cell with n below ${MIN_N} stays empty. The page does not show a `
+      + 'weak correlation as a fact. Use the lag slider to shift Y against X: a cause cannot come after '
+      + 'its effect. '
       + (thin.length
-        ? `Поки недобирають спостережень: ${thin.map((c) => `${c.label} (${c.n})`).join(', ')}.`
-        : 'Усі метрики мають достатнє покриття.'),
+        ? `Still short of observations: ${thin.map((c) => `${c.label} (${c.n})`).join(', ')}.`
+        : 'Every metric has enough coverage.'),
       P.ref));
 
     // -------------------------------------------------------- lag + matrix
@@ -127,15 +128,15 @@ export default {
     out.push(h('div.hh-panel', [
       h('div.ph', [
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: '3px' } }, [
-          h('span.pt', 'Повзунок лагу'),
-          h('span.pn', 'Зсуває Y проти X у добах — коефіцієнт перераховується наживо'),
+          h('span.pt', 'Lag slider'),
+          h('span.pn', 'Shift Y against X in days. The coefficient updates at once.'),
         ]),
         h('div.hh-lag', [
           h('input', {
             type: 'range', min: '-3', max: '3', step: '1', value: String(lag),
             onInput: (ev) => ctx.setState({ lag: Number(ev.target.value) }),
           }),
-          h('span.v', `${lag > 0 ? '+' : ''}${lag} д`),
+          h('span.v', `${lag > 0 ? '+' : ''}${lag} d`),
           h('select', {
             onChange: (ev) => ctx.setState({ corrWindow: Number(ev.target.value) }),
             style: {
@@ -144,7 +145,7 @@ export default {
             },
           }, [30, 45, 60, 90].map((d) => h('option', {
             value: String(d), selected: d === pd.days ? '' : null,
-          }, `${d} діб`))),
+          }, `${d} days`))),
         ]),
       ]),
       h('div.hh-corr', [
@@ -156,7 +157,7 @@ export default {
             const { r, n } = stat(i, j);
             if (i === j) return { color: P.rule, op: 1, title: `${M[i].label} · n=${n}` };
             if (r === null || n < MIN_N) {
-              return { color: null, title: `${M[i].label} × ${M[j].label} · n=${n} — замало` };
+              return { color: null, title: `${M[i].label} × ${M[j].label} · n=${n}, too few` };
             }
             return {
               color: r > 0 ? ctx.accent : P.ref,
@@ -180,19 +181,20 @@ export default {
           ]),
           scatterOrEmpty(ctx, pd, M, sel, lag, selStat),
           h('div.hh-scatterwarn',
-            `Неконтрольовані конфаундери в цьому зрізі: нічні тривоги, алкоголь, температура спальні, `
-            + `таймстемпи IQOS ±15%. Лаг ${lag > 0 ? '+' : ''}${lag} д, вікно ${pd.days} діб. `
-            + 'Кореляція не є причинністю — для причинності потрібне чергування, а не спостереження.'),
+            'This slice does not control these confounders: air raid alerts at night, alcohol, bedroom '
+            + `temperature and IQOS timestamps at ±15%. Lag ${lag > 0 ? '+' : ''}${lag} d over a `
+            + `${pd.days}-day window. A correlation is not a cause. To show a cause you must alternate the `
+            + 'intervention and not only observe.'),
         ]),
       ]),
     ]));
 
     // ---------------------------------------------------------- experiments
     out.push(panel(
-      'Активні експерименти',
-      'Прогрес рахується з реальних даних: n — це кількість діб, де в recorder’і є обидві змінні '
-      + 'гіпотези одночасно.',
-      `${pd.experiments.filter((e) => e.n >= e.need).length} із ${pd.experiments.length} набрали n`,
+      'Active experiments',
+      'Progress comes from the real data: n is the number of days where the recorder holds both variables '
+      + 'of the hypothesis at once.',
+      `${pd.experiments.filter((e) => e.n >= e.need).length} of ${pd.experiments.length} have reached n`,
       h('div.hh-exps', pd.experiments.map((x) => h('div.hh-exp', [
         h('div.id', [
           h('span', x.id),
@@ -238,7 +240,7 @@ function shift(x, y, lag) {
 
 function scatterOrEmpty(ctx, pd, M, sel, lag, stat) {
   if (sel[0] === sel[1]) {
-    return emptyState('Метрика сама з собою — оберіть іншу клітинку матриці.');
+    return emptyState('A metric against itself. Pick another cell in the matrix.');
   }
   const [xs, ys] = shift(pd.cols[M[sel[0]].key], pd.cols[M[sel[1]].key], lag);
   const pts = [];
@@ -249,8 +251,8 @@ function scatterOrEmpty(ctx, pd, M, sel, lag, stat) {
   }
   if (pts.length < MIN_N) {
     return emptyState(
-      `Недостатньо даних: n = ${pts.length}, потрібно ще ${Math.max(0, MIN_N - pts.length)} спостережень. `
-      + 'Порожньо — це чесніше, ніж лінія по п’яти точках.',
+      `Not enough data: n = ${pts.length}, ${Math.max(0, MIN_N - pts.length)} more observations needed. `
+      + 'Empty is more honest than a line through five points.',
     );
   }
   const xv = pts.map((p) => p.x), yv = pts.map((p) => p.y);
@@ -266,7 +268,7 @@ function scatterOrEmpty(ctx, pd, M, sel, lag, stat) {
     reg: reg ? [{ ...reg, color: (stat.r ?? 0) > 0 ? ctx.accent : P.ref }] : [],
     hlines: [{
       v: yv.reduce((a, b) => a + b, 0) / yv.length,
-      label: `медіана ${M[sel[1]].label}`, color: P.off, dash: '3 4',
+      label: `${M[sel[1]].label} median`, color: P.off, dash: '3 4',
     }],
   });
 }
@@ -283,48 +285,48 @@ function experiments(cols, blandNights) {
   };
   const rOf = (a, b) => {
     const { r, n } = pearson(cols[a] || [], cols[b] || []);
-    return n >= MIN_N && r !== null ? `r = ${fmt(r, 2)}` : 'ефект ще не рахується';
+    return n >= MIN_N && r !== null ? `r = ${fmt(r, 2)}` : 'effect not computable yet';
   };
 
   const list = [
     {
-      id: 'E09', h: '19 °C дає більше глибокого сну, ніж 24 °C',
+      id: 'E09', h: '19 °C yields more slow-wave sleep than 24 °C',
       n: paired('bedT', 'deep'), need: 16, effect: rOf('bedT', 'deep'),
     },
     {
-      id: 'E10', h: 'CO₂ понад 900 ppm фрагментує сон',
+      id: 'E10', h: 'CO₂ above 900 ppm fragments sleep',
       n: paired('co2', 'sleep'), need: 30, effect: rOf('co2', 'sleep'),
     },
     {
-      id: 'E29', h: 'Піки PM2.5 у спальні — це IQOS, а не вулиця',
+      id: 'E29', h: 'Bedroom PM2.5 peaks are IQOS, not the street',
       n: paired('iqos', 'pm25'), need: 30, effect: rOf('iqos', 'pm25'),
     },
     {
-      id: 'E26', h: 'Доріжка витісняє IQOS-мікроперерви',
+      id: 'E26', h: 'The treadmill displaces IQOS micro-breaks',
       n: paired('pad', 'iqos'), need: 60, effect: rOf('pad', 'iqos'),
     },
     {
-      id: 'E05', h: 'Тривалість сну → ранкова глюкоза натще (лаг +1)',
+      id: 'E05', h: 'Sleep duration drives the morning fasting glucose (lag +1)',
       n: paired('sleep', 'glucose'), need: 60, effect: rOf('sleep', 'glucose'),
     },
     {
-      id: 'E01', h: 'Вуглеводи на прийом лінійно визначають постпрандіальний AUC',
+      id: 'E01', h: 'Carbs per meal linearly determine the postprandial rise',
       n: paired('carbs', 'glucose'), need: 40, effect: rOf('carbs', 'glucose'),
     },
     {
-      id: 'E12', h: 'Oura і Muse систематично розходяться по часу неспання',
-      n: blandNights, need: 30, effect: 'Bland–Altman на сторінці «Довіра»',
+      id: 'E12', h: 'Oura and Muse diverge systematically on awake time',
+      n: blandNights, need: 30, effect: 'Bland-Altman on the Data trust page',
     },
     {
-      id: 'E17', h: 'Нічний dipping < 10% — головний невиміряний ризик',
-      n: 0, need: 14, effect: 'чекає на Aktiia',
+      id: 'E17', h: 'Nocturnal dipping under 10% is the main unmeasured risk',
+      n: 0, need: 14, effect: 'waiting on Aktiia',
     },
   ];
 
   return list.map((x) => {
     const pct = x.need ? x.n / x.need : 0;
     const color = x.n === 0 ? P.alert : pct >= 1 ? P.good : pct >= 0.5 ? P.warn : P.ref;
-    const ready = x.n === 0 ? 'немає даних' : pct >= 1 ? 'n набрано' : `${Math.round(pct * 100)}%`;
+    const ready = x.n === 0 ? 'no data' : pct >= 1 ? 'n reached' : `${Math.round(pct * 100)}%`;
     return { ...x, color, ready };
   });
 }

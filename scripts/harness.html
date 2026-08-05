@@ -244,6 +244,14 @@ function fakeHistory(msg) {
       } else if (id.includes('foodwatch_last_eaten')) {
         rows.push({ lu: t / 1000, s: new Date(t).toISOString().slice(0, 19).replace('T', ' ') });
         continue;
+      } else if (id.includes('foodwatch_last_meal')) {
+        const dish = ['Mango sticky rice', 'Gnocchi with chicken thigh', 'Buckwheat with beef stew',
+          'Omelette with spinach'][i % 4];
+        const d = new Date(t);
+        rows.push({ lu: t / 1000, s: `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')} `
+          + `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} · ${dish} (obid) — `
+          + `${380 + (i % 5) * 40} ккал, Б ${20 + i % 9}г, Ж ${14 + i % 7}г, В ${30 + (i % 6) * 6}г` });
+        continue;
       } else v = 10 + (i % 11);
       rows.push({ lu: t / 1000, s: String(v.toFixed(2)) });
     }

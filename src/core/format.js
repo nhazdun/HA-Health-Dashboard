@@ -8,44 +8,47 @@ export const num = (s) => {
   return Number.isFinite(v) ? v : null;
 };
 
+/** Missing data says so in words. A dash reads like a value; "no data" cannot. */
+export const NO_DATA = 'no data';
+
 export function fmt(v, d) {
-  if (v === null || v === undefined || Number.isNaN(v)) return '—';
+  if (v === null || v === undefined || Number.isNaN(v)) return NO_DATA;
   const n = Number(v);
-  if (!Number.isFinite(n)) return '—';
+  if (!Number.isFinite(n)) return NO_DATA;
   const dec = d === undefined
     ? (Math.abs(n) >= 100 ? 0 : Math.abs(n) >= 10 ? 1 : Math.abs(n) >= 1 ? 2 : 3)
     : d;
   return n.toFixed(dec).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
 }
 
-/** "12 хв", "3 год", "8 д" — how old a reading is. */
+/** "12 min", "3 h", "8 d" — how old a reading is. */
 export function age(ms) {
-  if (ms === null || ms === undefined || !Number.isFinite(ms)) return '—';
+  if (ms === null || ms === undefined || !Number.isFinite(ms)) return NO_DATA;
   const s = Math.max(0, Math.floor(ms / 1000));
-  if (s < 60) return s + ' с';
+  if (s < 60) return s + ' s';
   const m = Math.floor(s / 60);
-  if (m < 60) return m + ' хв';
+  if (m < 60) return m + ' min';
   const hr = Math.floor(m / 60);
-  if (hr < 48) return hr + ' год';
+  if (hr < 48) return hr + ' h';
   const d = Math.floor(hr / 24);
-  if (d < 60) return d + ' д';
+  if (d < 60) return d + ' d';
   const mo = Math.floor(d / 30.44);
-  return mo < 24 ? mo + ' міс' : Math.floor(d / 365.25) + ' р';
+  return mo < 24 ? mo + ' mo' : Math.floor(d / 365.25) + ' y';
 }
 
 export function hhmm(mins) {
-  if (mins === null || mins === undefined || !Number.isFinite(mins)) return '—';
+  if (mins === null || mins === undefined || !Number.isFinite(mins)) return NO_DATA;
   const m = Math.max(0, Math.round(mins));
   return Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0');
 }
 
 export function clockOf(d) {
-  if (!d) return '—';
+  if (!d) return NO_DATA;
   return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 }
 
 export function dateOf(iso) {
-  if (!iso) return '—';
+  if (!iso) return NO_DATA;
   const d = iso instanceof Date ? iso : new Date(iso);
   if (Number.isNaN(+d)) return String(iso).slice(0, 10);
   return d.toISOString().slice(0, 10);

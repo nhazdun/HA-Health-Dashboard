@@ -4,7 +4,7 @@ import { entityCard, panel, banner, emptyState, legendRow } from '../core/ui.js'
 import { lineChart, laneChart } from '../charts/svg.js';
 import { dayKey, resample } from '../core/ha.js';
 import { loadEvents, eventsFor } from '../core/events.js';
-import { fmt, age, clockOf } from '../core/format.js';
+import { fmt, age, clockOf, NO_DATA } from '../core/format.js';
 import { E } from '../core/registry.js';
 
 /**
@@ -18,17 +18,17 @@ const WEEKS = 12;
 
 export default {
   id: 'behav',
-  label: 'Поведінка',
-  title: 'Поведінка',
-  question: 'Що я насправді роблю щодня?',
-  scale: 'доба',
+  label: 'Behaviour',
+  title: 'Behaviour',
+  question: 'What do I actually do every day?',
+  scale: 'day',
 
   live(ctx) {
     const iqos = ctx.sourceState('iqos');
     const mac = ctx.sourceState('macos');
-    if (iqos.state === 'dead') return { color: P.alert, label: 'IQOS не синхронізований' };
-    if (mac.state === 'dead' || mac.state === 'empty') return { color: P.warn, label: 'немає факту мітингів' };
-    return { color: P.warn, label: 'ручна синхронізація' };
+    if (iqos.state === 'dead') return { color: P.alert, label: 'IQOS not synced' };
+    if (mac.state === 'dead' || mac.state === 'empty') return { color: P.warn, label: 'no true meeting record' };
+    return { color: P.warn, label: 'manual sync' };
   },
 
   async load(ctx) {
@@ -63,10 +63,11 @@ export default {
     if (known.length >= 2) {
       const vs = known.map(([, v]) => v);
       const spread = Math.max(...vs) - Math.min(...vs);
-      out.push(banner('ТРИ ЛІЧИЛЬНИКИ КРОКІВ',
-        `Доріжка ${fmt(steps.pad, 0)}, Oura ${fmt(steps.oura, 0)}, iPhone ${fmt(steps.phone, 0)}. `
-        + `Розкид ${fmt(spread, 0)} кроків. Це не надлишковість, а вбудована валідація: доріжка рахує `
-        + 'лише свої сесії, кільце — рух руки, телефон — те, що в кишені. Жоден із трьох не є «правильним».',
+      out.push(banner('THREE STEP COUNTERS',
+        `Treadmill ${fmt(steps.pad, 0)}, Oura ${fmt(steps.oura, 0)}, iPhone ${fmt(steps.phone, 0)}. `
+        + `The spread is ${fmt(spread, 0)} steps. This is not redundancy but built-in validation: the `
+        + 'treadmill counts only its own sessions, the ring reads arm movement and the phone counts what '
+        + 'is in your pocket. None of the three is the correct one.',
         spread > 3000 ? P.warn : P.ref));
     }
 
@@ -74,91 +75,91 @@ export default {
     const cards = [];
     const iqos = data.val(E.iqosToday);
     cards.push(entityCard(ctx, {
-      span: 2, size: '40px', label: 'IQOS за добу', entity: E.iqosToday, dec: 0, unit: 'стиків',
+      span: 2, size: '40px', label: 'IQOS per day', entity: E.iqosToday, dec: 0, unit: 'sticks',
       srcState: ctx.sourceState('iqos').state,
       ranges: { refMin: 0, refMax: 46, optMin: 0, optMax: 0 },
-      delta: `затяжок ${fmt(data.val(E.iqosPuffs), 0)} · ціль 0\nостання синхронізація ${data.raw(E.iqosSync) || '—'}`,
+      delta: `${fmt(data.val(E.iqosPuffs), 0)} puffs · target 0\nlast sync ${data.raw(E.iqosSync) || NO_DATA}`,
       deltaColor: iqos > 20 ? P.alert : P.warn,
-      source: 'IQOS · ручна синхронізація ±15%',
-      note: 'таймстемпи на межі для E29',
+      source: 'IQOS · manual sync ±15%',
+      note: 'timestamps borderline for E29',
     }));
 
     cards.push(entityCard(ctx, {
-      label: 'Доріжка сьогодні', entity: E.padTimeDay, dec: 2, unit: 'год',
+      label: 'Treadmill today', entity: E.padTimeDay, dec: 2, unit: 'h',
       srcState: ctx.sourceState('kingsmith').state,
-      delta: `${fmt(data.val(E.padStepsDay), 0)} кроків · ${fmt(data.val(E.padDistDay), 2)} км`,
+      delta: `${fmt(data.val(E.padStepsDay), 0)} steps · ${fmt(data.val(E.padDistDay), 2)} km`,
       deltaColor: P.good,
       source: 'KingSmith',
     }));
     cards.push(entityCard(ctx, {
-      label: 'Кроки · Oura', entity: E.ouraSteps, dec: 0, unit: 'кроків',
+      label: 'Steps · Oura', entity: E.ouraSteps, dec: 0, unit: 'steps',
       srcState: ctx.sourceState('oura').state,
-      delta: 'незалежний лічильник №2',
+      delta: 'independent counter number two',
       source: 'Oura Ring',
     }));
     cards.push(entityCard(ctx, {
-      label: 'Кроки · iPhone', entity: E.phoneSteps, dec: 0, unit: 'кроків',
+      label: 'Steps · iPhone', entity: E.phoneSteps, dec: 0, unit: 'steps',
       srcState: ctx.sourceState('iphone').state,
-      delta: `дистанція ${fmt(data.val(E.phoneDistance), 0)} м`,
-      source: 'iPhone · лічильник №3',
+      delta: `distance ${fmt(data.val(E.phoneDistance), 0)} m`,
+      source: 'iPhone · counter number three',
     }));
     cards.push(entityCard(ctx, {
-      label: 'Вода', entity: E.waterToday, dec: 0, unit: 'мл',
+      label: 'Water', entity: E.waterToday, dec: 0, unit: 'mL',
       srcState: ctx.sourceState('hidrate').state,
       ranges: { refMin: 0, refMax: 3000, optMin: 2000, optMax: 3000 },
-      delta: `${fmt(data.val(E.sipsToday), 0)} ковтків · ${fmt(data.val(E.refillsToday), 0)} наповнень`,
+      delta: `${fmt(data.val(E.sipsToday), 0)} sips · ${fmt(data.val(E.refillsToday), 0)} refills`,
       deltaColor: P.warn,
       source: 'Hidrate Spark',
-      emptyHint: 'пляшка поза звʼязком — покриття неповне',
+      emptyHint: 'the bottle is offline. Coverage is incomplete',
     }));
 
     const slouch = data.val(E.slouchTime), upright = data.val(E.uprightTime);
     const pct = slouch !== null && upright !== null && slouch + upright > 0
       ? (slouch / (slouch + upright)) * 100 : null;
     cards.push(entityCard(ctx, {
-      label: 'Кут постави', entity: E.postureAngle, dec: 1, unit: '°',
+      label: 'Posture angle', entity: E.postureAngle, dec: 1, unit: '°',
       srcState: ctx.sourceState('upright').state,
       ranges: { refMin: 0, refMax: 45, optMin: 0, optMax: 10 },
-      delta: 'оптимум 0–10°',
+      delta: 'optimum 0 to 10°',
       deltaColor: (data.val(E.postureAngle) ?? 0) > 10 ? P.warn : P.good,
       source: 'Upright GO 2',
     }));
     cards.push(entityCard(ctx, {
-      label: 'Час згорблено', value: pct, text: fmt(pct, 1), unit: '%',
+      label: 'Time slouched', value: pct, text: fmt(pct, 1), unit: '%',
       srcState: pct === null ? 'empty' : ctx.sourceState('upright').state,
       entity: E.slouchTime,
       ranges: { refMin: 0, refMax: 100, optMin: 0, optMax: 20 },
-      delta: pct === null ? '' : `${fmt(slouch, 1)} згорблено / ${fmt(upright, 1)} рівно, хв`,
+      delta: pct === null ? '' : `${fmt(slouch, 1)} slouched / ${fmt(upright, 1)} upright, min`,
       deltaColor: pct > 30 ? P.warn : P.good,
       source: 'Upright GO 2',
     }));
     cards.push(entityCard(ctx, {
-      label: 'Рух', entity: E.movement,
+      label: 'Movement', entity: E.movement,
       text: movementLabel(data.raw(E.movement)), size: '22px', unit: '',
       srcState: ctx.sourceState('upright').state,
-      delta: 'проксі до сидячого часу',
+      delta: 'a proxy for sedentary time',
       source: 'Upright GO 2',
-      emptyHint: 'датчик руху ще не віддав стан',
+      emptyHint: 'the movement sensor has not reported a state yet',
     }));
 
     const camMin = cameraMinutes(pd.camera[E.camera] || []);
     cards.push(entityCard(ctx, {
-      label: 'Мітинги, факт', value: camMin, text: camMin === null ? '—' : fmt(camMin, 0), unit: 'хв',
+      label: 'Meetings, ground truth', value: camMin, text: camMin === null ? NO_DATA : fmt(camMin, 0), unit: 'min',
       srcState: camMin === null ? 'empty' : ctx.sourceState('macos').state,
       entity: E.camera,
-      delta: camMin === null ? '' : `камера ноутбука активна · зараз ${data.raw(E.frontApp) || '—'}`,
+      delta: camMin === null ? '' : `laptop camera active · now ${data.raw(E.frontApp) || NO_DATA}`,
       deltaColor: P.good,
       source: 'HA Companion macOS · camera_in_use',
-      emptyHint: 'сенсори ноутбука вимкнені — E27 без ground truth',
-      note: camMin === null ? 'E27 заблокований' : null,
+      emptyHint: 'the laptop sensors are off, so E27 has no ground truth',
+      note: camMin === null ? 'E27 blocked' : null,
     }));
 
     cards.push(entityCard(ctx, {
-      label: 'Екранний час', entity: null, value: null, text: '—', unit: 'хв',
+      label: 'Screen time', entity: null, value: null, text: NO_DATA, unit: 'min',
       srcState: 'empty',
-      emptyHint: 'немає сенсора Screen Time; для E13 потрібне вікно −2 год до сну, а не добова сума',
+      emptyHint: 'there is no Screen Time sensor. E13 needs the 2 hours before bed and not the daily total',
       source: 'iPhone',
-      note: 'E13 заблокований', noteColor: P.ref,
+      note: 'E13 blocked', noteColor: P.ref,
     }));
 
     out.push(h('div.hh-cards', cards));
@@ -166,31 +167,31 @@ export default {
     // ----------------------------------------------------- posture over the day
     const postureVals = (pd.posture || []).map((p) => p.v);
     out.push(panel(
-      'Кут постави протягом дня',
+      'Posture angle across the day',
       pd.posture && pd.posture.length
-        ? 'Відхилення верхньої частини спини від вертикалі. Усе, що вище лінії 10°, рахується як '
-          + `згорбленість — сьогодні це ${pct === null ? '—' : fmt(pct, 1) + '%'} відстеженого часу. `
-          + `${pd.posture.length} записів із recorder’а за добу.`
-        : 'Ряд кута постави за добу порожній.',
-      'Upright GO 2 · градуси',
+        ? 'How far the upper back leans from vertical. Everything above the 10° line counts as a slouch, '
+          + `which today is ${pct === null ? NO_DATA : fmt(pct, 1) + '%'} of the tracked time. `
+          + `${pd.posture.length} records from the recorder over the day.`
+        : 'The posture-angle series for the day is empty.',
+      'Upright GO 2 · degrees',
       pd.posture && pd.posture.length >= 2
         ? lineChart({
           h: 210, yMin: 0,
           yMax: Math.max(48, Math.ceil(Math.max(...postureVals) * 1.1)),
           yTicks: [0, 10, 20, 30, 40],
-          xLabels: ['−24 год', '−18', '−12', '−6', 'зараз'],
+          xLabels: ['−24 h', '−18', '−12', '−6', 'now'],
           series: [{
-            pts: resample(pd.posture, 120, Date.now() - 24 * 3600e3, Date.now()),
+            pts: resample(pd.posture, 120, Date.now() - 24 * 3600e3, Date.now(), { bridgeMinutes: 45 }),
             color: ctx.accent, w: 1.5, fill: true,
           }],
           thresholds: [
-            { v: 10, color: P.warn, label: 'поріг згорбленості 10°' },
-            { v: data.val(E.postureAngle) ?? 0, color: P.off, label: `зараз ${fmt(data.val(E.postureAngle), 1)}°` },
+            { v: 10, color: P.warn, label: 'slouch threshold 10°' },
+            { v: data.val(E.postureAngle) ?? 0, color: P.off, label: `now ${fmt(data.val(E.postureAngle), 1)}°` },
           ],
           events: eventsFor(pd.evts, Date.now() - 24 * 3600e3, Date.now(), ctx, ['meal', 'iqos']),
           showEvents: ctx.state.annotations,
         })
-        : emptyState('Датчик постави не дав ряду за останні 24 години.'),
+        : emptyState('The posture sensor returned no series for the last 24 hours.'),
     ));
 
     // ---------------------------------------------------------- day ribbon
@@ -199,9 +200,9 @@ export default {
     const lanes = buildLanes(ctx, pd, dayStart, dayEnd);
     const anySeg = lanes.some((l) => l.segs && l.segs.length);
     out.push(panel(
-      'Стрічка дня',
-      'Одна часова вісь для всього: прийоми їжі, сесії на доріжці, затяжки IQOS, камера ноутбука, тривоги. '
-      + 'Побудована з реальних переходів станів у recorder’і за сьогодні.',
+      'Day ribbon',
+      'One time axis holds every event: meals, treadmill sessions, IQOS, the laptop camera and alerts. '
+      + 'It is built from the real state transitions the recorder holds for today.',
       `${clockOf(new Date(dayStart))} → 24:00`,
       anySeg
         ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } }, [
@@ -210,14 +211,14 @@ export default {
             xLabels: ['00:00', '06:00', '12:00', '18:00', '24:00'],
           }),
           legendRow([
-            { color: ctx.accent, label: 'їжа' },
-            { color: P.good, label: 'доріжка' },
-            { color: P.alert, label: 'IQOS / тривога' },
-            { color: P.olive, label: 'згорблено' },
-            { color: P.ref, label: 'камера ноутбука' },
+            { color: ctx.accent, label: 'meals' },
+            { color: P.good, label: 'treadmill' },
+            { color: P.alert, label: 'IQOS / alert' },
+            { color: P.olive, label: 'slouched' },
+            { color: P.ref, label: 'laptop camera' },
           ]),
         ])
-        : emptyState('За сьогодні ще немає жодної події в recorder’і.'),
+        : emptyState('The recorder holds no event for today yet.'),
     ));
 
     // ------------------------------------------------------- substitution
@@ -225,19 +226,19 @@ export default {
     const padDaily = grid(pd.padStats[E.padTimeDay] || [], pd.days, 'max');
     const hasBoth = iqosDaily.filter(Number.isFinite).length >= 3 && padDaily.filter(Number.isFinite).length >= 3;
     out.push(panel(
-      `Заміщення: доріжка проти IQOS — ${WEEKS} тижнів`,
+      `Substitution: treadmill against IQOS over ${WEEKS} weeks`,
       hasBoth
-        ? 'Не дві окремі лінії, а один потік. Гіпотеза E26 стверджує, що хвилини на доріжці витісняють '
-          + 'мікроперерви на IQOS; якщо це так, криві мають рухатись назустріч.'
-        : 'Для перевірки E26 потрібні обидва ряди в довгостроковій статистиці.',
-      'стиків/добу · год на доріжці',
+        ? 'This is one flow and not two separate lines. Hypothesis E26 says treadmill minutes displace '
+          + 'IQOS micro-breaks. If that holds, the curves must move towards each other.'
+        : 'Testing E26 needs both series in the long-term statistics.',
+      'sticks/day · treadmill hours',
       hasBoth
         ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } }, [
           lineChart({
             h: 240, yMin: 0,
             yMax: Math.max(10, Math.ceil(Math.max(...iqosDaily.filter(Number.isFinite)) * 1.15)),
             yTicks: tickList(Math.max(...iqosDaily.filter(Number.isFinite))),
-            xLabels: [`−${WEEKS} тижнів`, `−${Math.round(WEEKS * 0.66)}`, `−${Math.round(WEEKS * 0.33)}`, 'зараз'],
+            xLabels: [`−${WEEKS} weeks`, `−${Math.round(WEEKS * 0.66)}`, `−${Math.round(WEEKS * 0.33)}`, 'now'],
             series: [
               { pts: iqosDaily, color: P.alert, fill: true, w: 2 },
               {
@@ -247,11 +248,11 @@ export default {
             ],
           }),
           legendRow([
-            { color: P.alert, label: 'IQOS стиків/добу' },
-            { color: ctx.accent, label: 'доріжка, годин (масштабовано до осі)' },
+            { color: P.alert, label: 'IQOS sticks per day' },
+            { color: ctx.accent, label: 'treadmill hours (scaled to the axis)' },
           ]),
         ])
-        : emptyState('Довгострокової статистики по IQOS та доріжці за це вікно бракує.'),
+        : emptyState('The long-term statistics for IQOS and the treadmill are missing for this window.'),
     ));
 
     // ------------------------------------------------------- step counters
@@ -260,16 +261,16 @@ export default {
     const padSteps = grid(pd.padStats[E.padStepsDay] || [], pd.days, 'max');
     const allSteps = [...ouraSteps, ...phoneSteps, ...padSteps].filter(Number.isFinite);
     out.push(panel(
-      'Три лічильники кроків на одній осі',
-      'Розбіжність між ними — окрема метрика, а не шум, який треба прибрати. '
-      + 'Дні, коли доріжка дає більше за кільце, і дні, коли навпаки, означають різні типи активності.',
-      'Oura · iPhone · доріжка',
+      'Three step counters on one axis',
+      'The spread between them is a metric and not noise to remove. Days where the treadmill leads the '
+      + 'ring and days where it trails mean different kinds of activity.',
+      'Oura · iPhone · treadmill',
       allSteps.length >= 3
         ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } }, [
           lineChart({
             h: 220, yMin: 0, yMax: Math.ceil(Math.max(...allSteps) * 1.1),
             yTicks: tickList(Math.max(...allSteps)),
-            xLabels: [`−${WEEKS} тижнів`, `−${Math.round(WEEKS * 0.66)}`, `−${Math.round(WEEKS * 0.33)}`, 'зараз'],
+            xLabels: [`−${WEEKS} weeks`, `−${Math.round(WEEKS * 0.66)}`, `−${Math.round(WEEKS * 0.33)}`, 'now'],
             series: [
               { pts: ouraSteps, color: P.ref, w: 1.6 },
               { pts: phoneSteps, color: P.olive, w: 1.6 },
@@ -279,10 +280,10 @@ export default {
           legendRow([
             { color: P.ref, label: 'Oura' },
             { color: P.olive, label: 'iPhone' },
-            { color: ctx.accent, label: 'доріжка' },
+            { color: ctx.accent, label: 'treadmill' },
           ]),
         ])
-        : emptyState('Ряди кроків ще не накопичились у довгостроковій статистиці.'),
+        : emptyState('The step series have not accumulated in the long-term statistics yet.'),
     ));
 
     return out;
@@ -292,7 +293,7 @@ export default {
 // ------------------------------------------------------------------ helpers
 
 function movementLabel(state) {
-  return { idle: 'спокій', moving: 'рух', unknown: '—' }[state] || (state || '—');
+  return { idle: 'idle', moving: 'moving', unknown: NO_DATA }[state] || (state || NO_DATA);
 }
 
 function startOfToday() {
@@ -327,12 +328,12 @@ function buildLanes(ctx, pd, dayStart, dayEnd) {
   const slouchSegs = onSegments((pd.slouchHist || {})[ctx.E.slouching] || []);
 
   return [
-    { label: 'Їжа', segs: pick('meal'), color: ctx.accent },
-    { label: 'Доріжка', segs: sessions, color: P.good },
+    { label: 'Meals', segs: pick('meal'), color: ctx.accent },
+    { label: 'Treadmill', segs: sessions, color: P.good },
     { label: 'IQOS', segs: pick('iqos'), color: P.alert },
-    { label: 'Згорблено', segs: slouchSegs, color: P.olive },
-    { label: 'Камера ноутбука', segs: camSegs, color: P.ref },
-    { label: 'Тривоги', segs: pick('alert'), color: P.alert },
+    { label: 'Slouched', segs: slouchSegs, color: P.olive },
+    { label: 'Laptop camera', segs: camSegs, color: P.ref },
+    { label: 'Alerts', segs: pick('alert'), color: P.alert },
   ];
 }
 

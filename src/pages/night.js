@@ -20,17 +20,17 @@ const NIGHTS = 30;
 
 export default {
   id: 'night',
-  label: 'Ніч',
-  title: 'Ніч',
-  question: 'Як я спав і чому саме так?',
-  scale: 'одна ніч',
+  label: 'Night',
+  title: 'Night',
+  question: 'How did I sleep, and why exactly that way?',
+  scale: 'one night',
 
   live(ctx) {
     const oura = ctx.sourceState('oura');
     const muse = ctx.sourceState('muse');
-    if (oura.state === 'dead' && muse.state === 'dead') return { color: P.alert, label: 'обидва джерела мовчать' };
-    if (muse.state === 'dead') return { color: P.warn, label: 'ЕЕГ-канал зник' };
-    return { color: P.ref, label: 'нічні дані приходять зранку' };
+    if (oura.state === 'dead' && muse.state === 'dead') return { color: P.alert, label: 'both sources silent' };
+    if (muse.state === 'dead') return { color: P.warn, label: 'EEG channel gone' };
+    return { color: P.ref, label: 'night data arrives in the morning' };
   },
 
   async load(ctx) {
@@ -62,14 +62,15 @@ export default {
     const museAwake = data.val(E.museAwake);
     if (ouraAwake !== null && museAwake !== null) {
       const d = Math.abs(ouraAwake - museAwake);
-      out.push(banner('ДВА ДЖЕРЕЛА',
-        `Muse показує ${fmt(museAwake, 0)} хв неспання, Oura — ${fmt(ouraAwake, 0)} хв. `
-        + `Розбіжність ${fmt(d, 0)} хв. Жодне з них не зламане: акселерометр рахує рух, ЕЕГ бачить кору. `
-        + 'Канали лишаються окремими і ніколи не зводяться в один бал.', P.ref));
+      out.push(banner('TWO SOURCES',
+        `Muse reports ${fmt(museAwake, 0)} min awake and Oura reports ${fmt(ouraAwake, 0)} min. `
+        + `The gap is ${fmt(d, 0)} min. Both devices work: the accelerometer counts movement and the EEG `
+        + 'reads the cortex. The page keeps the two channels apart and never merges them into one score.',
+        P.ref));
     } else if (muse.state === 'dead' || !data.exists(E.museDeep)) {
-      out.push(banner('ОДНЕ ДЖЕРЕЛО',
-        'ЕЕГ-канал Muse недоступний — залишається лише акселерометрична оцінка Oura. '
-        + 'Порівняння Bland–Altman (E12) без другого джерела неможливе.', P.warn));
+      out.push(banner('ONE SOURCE',
+        'The Muse EEG channel is not available, so only the accelerometer estimate from Oura remains. '
+        + 'Without a second source the Bland-Altman comparison (E12) cannot run.', P.warn));
     }
 
     // --------------------------------------------------------------- control
@@ -79,41 +80,41 @@ export default {
     // ----------------------------------------------------------------- cards
     const cards = [];
     const nightMetrics = [
-      ['Загальний сон', E.ouraTotalSleep, 'год', 2, { optMin: 7, optMax: 9 }],
-      ['Глибокий сон', E.ouraDeep, 'год', 2, { optMin: 1.2, optMax: 2.5 }],
-      ['Глибокий, %', E.ouraDeepPct, '%', 1, { optMin: 16, optMax: 30 }],
-      ['REM', E.ouraRem, 'год', 2, { optMin: 1.2, optMax: 2.2 }],
+      ['Total sleep', E.ouraTotalSleep, 'h', 2, { optMin: 7, optMax: 9 }],
+      ['Deep sleep', E.ouraDeep, 'h', 2, { optMin: 1.2, optMax: 2.5 }],
+      ['Deep, %', E.ouraDeepPct, '%', 1, { optMin: 16, optMax: 30 }],
+      ['REM', E.ouraRem, 'h', 2, { optMin: 1.2, optMax: 2.2 }],
       ['REM, %', E.ouraRemPct, '%', 1, { optMin: 18, optMax: 28 }],
-      ['Ефективність', E.ouraEff, '%', 0, { optMin: 85, optMax: 100 }],
-      ['Латентність', E.ouraLatency, 'хв', 0, { optMin: 0, optMax: 20 }],
-      ['Найнижчий пульс', E.ouraLowestHr, 'уд/хв', 0, { optMin: 45, optMax: 60 }],
+      ['Efficiency', E.ouraEff, '%', 0, { optMin: 85, optMax: 100 }],
+      ['Latency', E.ouraLatency, 'min', 0, { optMin: 0, optMax: 20 }],
+      ['Lowest HR', E.ouraLowestHr, 'bpm', 0, { optMin: 45, optMax: 60 }],
     ];
     for (const [label, id, unit, dec, ranges] of nightMetrics) {
       cards.push(entityCard(ctx, {
         label, entity: id, unit, dec, ranges, size: '24px',
         srcState: oura.state,
-        ageText: 'ранок',
-        source: 'Oura · нічний зріз',
-        emptyHint: 'Oura ще не віддала цю ніч',
+        ageText: 'morning',
+        source: 'Oura · nightly snapshot',
+        emptyHint: 'Oura has not returned this night yet',
       }));
     }
 
     cards.push(entityCard(ctx, {
-      label: 'Глибокий сон · ЕЕГ', entity: E.museDeep, unit: 'год', dec: 2, size: '24px',
+      label: 'Deep sleep · EEG', entity: E.museDeep, unit: 'h', dec: 2, size: '24px',
       srcState: muse.state,
-      delta: deltaVs(data.val(E.museDeep), data.val(E.ouraDeep), 'Oura', 'год'),
+      delta: deltaVs(data.val(E.museDeep), data.val(E.ouraDeep), 'Oura', 'h'),
       deltaColor: P.ref,
-      source: 'Muse S · дельта-активність',
+      source: 'Muse S · delta activity',
     }));
     cards.push(entityCard(ctx, {
-      label: 'Пікова частота альфа', entity: E.museApf, unit: 'Гц', dec: 2, size: '24px',
+      label: 'Alpha peak', entity: E.museApf, unit: 'Hz', dec: 2, size: '24px',
       srcState: muse.state,
       ranges: { optMin: 9, optMax: 11 },
-      delta: baselineDelta(data.val(E.museApf), data.val(E.museApfBase), 'база'),
+      delta: baselineDelta(data.val(E.museApf), data.val(E.museApfBase), 'baseline'),
       source: 'Muse S',
     }));
     cards.push(entityCard(ctx, {
-      label: 'Температура спальні', entity: E.bedTemp, unit: '°C', dec: 1, size: '24px',
+      label: 'Bedroom temperature', entity: E.bedTemp, unit: '°C', dec: 1, size: '24px',
       srcState: ctx.sourceState('qp_bed').state,
       ranges: { refMin: 16, refMax: 24, optMin: 17, optMax: 19 },
       delta: tempDelta(data.val(E.bedTemp)),
@@ -123,32 +124,32 @@ export default {
 
     const subDays = data.val(E.museSubDays);
     cards.push(entityCard(ctx, {
-      label: 'Підписка Muse', entity: E.museSubDays, unit: 'днів', dec: 0, size: '24px',
+      label: 'Muse subscription', entity: E.museSubDays, unit: 'days', dec: 0, size: '24px',
       srcState: subDays !== null && subDays <= 3 ? 'low' : muse.state,
       delta: subDays !== null && subDays <= 3
-        ? 'на нулі ЕЕГ-канал зникає' : 'незалежне джерело живе',
+        ? 'at zero the EEG channel stops' : 'the independent source is live',
       deltaColor: subDays !== null && subDays <= 3 ? P.alert : P.good,
       source: 'Muse S',
-      note: subDays !== null && subDays <= 3 ? 'домен під загрозою' : null,
+      note: subDays !== null && subDays <= 3 ? 'domain at risk' : null,
     }));
 
     out.push(h('div.hh-cards', cards));
 
     // -------------------------------------------------- two-source comparison
     const stages = [
-      ['Глибокий', data.val(E.ouraDeep), toHours(data.val(E.museDeep), 'h'), P.stage.deep],
+      ['Deep', data.val(E.ouraDeep), toHours(data.val(E.museDeep), 'h'), P.stage.deep],
       ['REM', data.val(E.ouraRem), toHours(data.val(E.museRem), 'min'), P.stage.rem],
-      ['Поверхневий', data.val(E.ouraLight), toHours(data.val(E.museLight), 'min'), P.stage.light],
-      ['Неспання', toHours(data.val(E.ouraAwake), 'min'), toHours(data.val(E.museAwake), 'min'), P.stage.awake],
+      ['Light', data.val(E.ouraLight), toHours(data.val(E.museLight), 'min'), P.stage.light],
+      ['Awake', toHours(data.val(E.ouraAwake), 'min'), toHours(data.val(E.museAwake), 'min'), P.stage.awake],
     ];
     const hasCompare = stages.some(([, a, b]) => a !== null || b !== null);
     out.push(panel(
-      'Oura проти Muse — стадії цієї ночі',
-      'Дві незалежні оцінки однієї ночі поруч. Різниця по кожній стадії підписана окремо: '
-      + 'це і є метрика узгодженості джерел (гіпотеза E12), а не привід усереднити їх.',
-      'зліва Oura · справа Muse',
+      'Oura against Muse: stages for this night',
+      'Two independent estimates of the same night, side by side. Each stage carries its own difference. '
+      + 'That difference is the agreement metric behind hypothesis E12, not a reason to average them.',
+      'Oura above · Muse below',
       hasCompare ? compareBars(stages) : emptyState(
-        'Жодне з джерел ще не віддало стадії за цю ніч. Oura пише вранці, Muse — з лагом до 20 годин.',
+        'Neither source has returned stages for this night. Oura writes in the morning and Muse lags up to 20 hours.',
       ),
     ));
 
@@ -157,16 +158,16 @@ export default {
     if (win && (pd.temp.length || pd.co2.length)) {
       const s = win.start, e = win.end;
       const co2Peak = pd.co2.length ? Math.max(...pd.co2.map((p) => p.v)) : null;
-      const tempPts = resample(pd.temp, 96, s, e);
+      const tempPts = resample(pd.temp, 96, s, e, { bridgeMinutes: 30 });
       const tempVals = tempPts.filter(Number.isFinite);
 
       out.push(panel(
-        'Середовище спальні за вікно сну',
-        `Вікно ${clockOf(new Date(s))} → ${clockOf(new Date(e))} взяте з Oura bedtime_start/end. `
+        'Bedroom environment across the sleep window',
+        `The window ${clockOf(new Date(s))} to ${clockOf(new Date(e))} comes from Oura bedtime_start and bedtime_end. `
         + (co2Peak !== null
-          ? `Піковий CO₂ за ніч ${fmt(co2Peak, 0)} ppm ${co2Peak > 900 ? '— вище порогу фрагментації 900' : '— нижче порогу 900'}. `
+          ? `The peak CO₂ for the night was ${fmt(co2Peak, 0)} ppm, ${co2Peak > 900 ? 'above' : 'below'} the 900 ppm fragmentation threshold. `
           : '')
-        + 'Температура — тепла вісь (власні умови), CO₂ — холодна.',
+        + 'Temperature uses the warm axis for your own conditions and CO₂ the cold one.',
         'T °C · CO₂ ppm · PM2.5',
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } }, [
           lineChart({
@@ -177,8 +178,8 @@ export default {
             xLabels: clockLabels(s, e, 5),
             series: [{ pts: tempPts, color: ctx.accent, w: 1.8 }],
             thresholds: [
-              { v: 19, color: P.good, label: 'верх оптимуму 19°' },
-              { v: 17, color: P.ref, label: 'низ 17°' },
+              { v: 19, color: P.good, label: 'optimum top 19°' },
+              { v: 17, color: P.ref, label: 'optimum floor 17°' },
             ],
             events: eventsFor(pd.evts, s, e, ctx),
             showEvents: ctx.state.annotations,
@@ -189,48 +190,48 @@ export default {
             yTicks: [400, 600, 800, 1000],
             xLabels: clockLabels(s, e, 5),
             series: [
-              { pts: resample(pd.co2, 96, s, e), color: P.ref, fill: true, w: 1.6 },
-              { pts: resample(pd.pm25, 96, s, e).map((v) => (v === null ? null : 350 + v * 12)), color: ctx.accent, w: 1.4 },
+              { pts: resample(pd.co2, 96, s, e, { bridgeMinutes: 30 }), color: P.ref, fill: true, w: 1.6 },
+              { pts: resample(pd.pm25, 96, s, e, { bridgeMinutes: 30 }).map((v) => (v === null ? null : 350 + v * 12)), color: ctx.accent, w: 1.4 },
             ],
-            thresholds: [{ v: 900, color: P.warn, label: 'фрагментація 900' }],
+            thresholds: [{ v: 900, color: P.warn, label: 'fragmentation 900' }],
             events: eventsFor(pd.evts, s, e, ctx, ['iqos', 'alert']),
             showEvents: ctx.state.annotations,
           }),
           legendRow([
-            { color: ctx.accent, label: 'температура / PM2.5 (масштабовано)' },
+            { color: ctx.accent, label: 'temperature / PM2.5 (scaled)' },
             { color: P.ref, label: 'CO₂ ppm' },
           ]),
         ]),
       ));
     } else {
-      out.push(panel('Середовище спальні за вікно сну',
-        'Вікно сну беремо з Oura bedtime_start/bedtime_end.', '',
-        emptyState('Oura не віддала межі сну за цю ніч, тому вікно не визначене. '
-          + 'Ряди Qingping існують, але немає, до чого їх прив’язати.')));
+      out.push(panel('Bedroom environment across the sleep window',
+        'The sleep window comes from Oura bedtime_start and bedtime_end.', '',
+        emptyState('Oura returned no sleep boundaries for this night, so the window is undefined. '
+          + 'The Qingping series exist but there is nothing to align them to.')));
     }
 
     // ---------------------------------------------------- 30-night ribbon
     const stacks = pd.dailyStages;
     const filled = stacks.filter((s) => s && s.parts && s.parts.length).length;
     out.push(panel(
-      `Стрічка ${NIGHTS} ночей`,
-      `Кожна ніч — один вертикальний стек стадій із довгострокової статистики Oura. `
-      + `${filled} із ${NIGHTS} ночей мають дані; порожні позиції — ночі без кільця, і вони лишаються порожніми.`,
-      'глибокий · REM · поверхневий · неспання',
+      `${NIGHTS} nights, stacked stages`,
+      'Each night is one vertical stack built from the Oura long-term statistics. '
+      + `${filled} of ${NIGHTS} nights carry data. An empty slot is a night without the ring and it stays empty.`,
+      'deep · REM · light · awake',
       filled
         ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } }, [
           stackChart({
-            h: 200, stacks, yMax: 10, yTicks: [0, 2, 4, 6, 8], yUnit: ' год',
-            xLabels: [`−${NIGHTS} д`, `−${Math.round(NIGHTS * 0.66)}`, `−${Math.round(NIGHTS * 0.33)}`, 'сьогодні'],
+            h: 200, stacks, yMax: 10, yTicks: [0, 2, 4, 6, 8], yUnit: ' h',
+            xLabels: [`−${NIGHTS} d`, `−${Math.round(NIGHTS * 0.66)}`, `−${Math.round(NIGHTS * 0.33)}`, 'today'],
           }),
           legendRow([
-            { color: P.stage.deep, label: 'глибокий' },
+            { color: P.stage.deep, label: 'deep' },
             { color: P.stage.rem, label: 'REM' },
-            { color: P.stage.light, label: 'поверхневий' },
-            { color: P.stage.awake, label: 'неспання' },
+            { color: P.stage.light, label: 'light' },
+            { color: P.stage.awake, label: 'awake' },
           ]),
         ])
-        : emptyState('Довгострокова статистика по стадіях сну ще не накопичилась.'),
+        : emptyState('The long-term statistics for sleep stages have not accumulated yet.'),
     ));
 
     return out;
@@ -257,20 +258,20 @@ function toHours(v, unit) {
 function deltaVs(a, b, name, unit) {
   if (a === null || b === null) return '';
   const d = a - b;
-  return `Δ ${d >= 0 ? '+' : '−'}${fmt(Math.abs(d), 2)} ${unit} проти ${name}`;
+  return `Δ ${d >= 0 ? '+' : '−'}${fmt(Math.abs(d), 2)} ${unit} vs ${name}`;
 }
 
 function baselineDelta(v, base, label) {
   if (v === null || base === null) return '';
   const d = v - base;
-  return Math.abs(d) < 0.02 ? `${label} ${fmt(base, 2)} — рівно` : `Δ ${d > 0 ? '+' : '−'}${fmt(Math.abs(d), 2)} до ${label}`;
+  return Math.abs(d) < 0.02 ? `${label} ${fmt(base, 2)}, flat` : `Δ ${d > 0 ? '+' : '−'}${fmt(Math.abs(d), 2)} vs ${label}`;
 }
 
 function tempDelta(t) {
   if (t === null) return '';
-  if (t > 19) return `+${fmt(t - 19, 1)}° над оптимумом 17–19`;
-  if (t < 17) return `−${fmt(17 - t, 1)}° під оптимумом 17–19`;
-  return 'в оптимумі 17–19';
+  if (t > 19) return `+${fmt(t - 19, 1)}° above the 17 to 19 optimum`;
+  if (t < 17) return `−${fmt(17 - t, 1)}° below the 17 to 19 optimum`;
+  return 'inside the 17 to 19 optimum';
 }
 
 function tempTicks(vals) {
@@ -303,7 +304,7 @@ function compareBars(stages) {
           h('span', label),
           h('span', {
             style: { fontFamily: "'Geist Mono',monospace", fontSize: '10.5px', color: d === null ? P.off : P.ref },
-          }, d === null ? 'одне джерело' : `Δ ${d >= 0 ? '+' : '−'}${fmt(Math.abs(d) * 60, 0)} хв`),
+          }, d === null ? 'one source only' : `Δ ${d >= 0 ? '+' : '−'}${fmt(Math.abs(d) * 60, 0)} min`),
         ]),
         bar('Oura', a, max, color, false),
         bar('Muse', b, max, color, true),
@@ -331,7 +332,7 @@ function bar(who, v, max, color, hatched) {
         fontFamily: "'Geist Mono',monospace", fontSize: '10.5px', color: v === null ? P.off : P.ink,
         textAlign: 'right',
       },
-    }, v === null ? 'немає' : `${fmt(v, 2)} год`),
+    }, v === null ? 'no data' : `${fmt(v, 2)} h`),
   ]);
 }
 
@@ -362,7 +363,7 @@ async function loadNightlyStages(data, nights) {
     ].filter(([v]) => Number.isFinite(v) && v > 0);
     const total = parts.reduce((s, [v]) => s + v, 0);
     out.push(parts.length
-      ? { parts, title: `${k} · ${fmt(total, 2)} год, глибокий ${fmt(deep, 2)}` }
+      ? { parts, title: `${k} · ${fmt(total, 2)} h total, deep ${fmt(deep, 2)}` }
       : null);
   }
   return out;

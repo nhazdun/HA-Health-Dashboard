@@ -1,6 +1,7 @@
 import { h } from './dom.js';
 import { P, ST, MONO } from './tokens.js';
-import { fmt, age, barGeom } from './format.js';
+import { fmt, age, barGeom, NO_DATA } from './format.js';
+import { infoFor } from './info.js';
 
 /**
  * Shared card / panel / banner components.
@@ -52,7 +53,12 @@ export function card(o) {
 
   const kids = [
     h('div.top', [
-      h('span.lab', o.label),
+      h('span.lab', [
+        h('span', o.label),
+        // The tooltip explains the metric itself, not its current value, so it
+        // stays useful when the number is missing.
+        o.info ? h('span.hh-info', { title: o.info, 'aria-label': o.info }, 'i') : null,
+      ]),
       h('span.age', [
         h('i.hh-dot', { style: { background: st.c } }),
         o.ageText || '',
@@ -121,14 +127,14 @@ export function entityCard(ctx, spec) {
   let noteOverride = spec.note;
   if (missing) {
     state = 'empty';
-    noteOverride = noteOverride || (spec.emptyHint || 'сенсора немає в HA');
+    noteOverride = noteOverride || (spec.emptyHint || 'no such entity in Home Assistant');
   } else if (unavailable || (v === null && spec.value === undefined && !spec.text)) {
     state = 'empty';
     noteOverride = noteOverride || (spec.emptyHint
-      || (id ? `недоступний з ${age(data.ageMs(id))} тому` : 'немає з чого рахувати'));
-  } else if (derived && v === null && (spec.text === undefined || spec.text === '—')) {
+      || (id ? `unavailable for ${age(data.ageMs(id))}` : 'nothing to compute from'));
+  } else if (derived && v === null && (spec.text === undefined || spec.text === NO_DATA)) {
     state = 'empty';
-    noteOverride = noteOverride || spec.emptyHint || 'немає з чого рахувати';
+    noteOverride = noteOverride || spec.emptyHint || 'nothing to compute from';
   }
 
   const ranges = spec.ranges || {};
@@ -144,10 +150,11 @@ export function entityCard(ctx, spec) {
     markColor = outRef ? P.alert : outOpt ? P.warn : P.good;
   }
 
-  const text = spec.text !== undefined ? spec.text : (v === null ? '—' : fmt(v, spec.dec));
+  const text = spec.text !== undefined ? spec.text : (v === null ? NO_DATA : fmt(v, spec.dec));
   const ageMs = spec.ageMs !== undefined ? spec.ageMs : (id ? data.ageMs(id) : null);
   const unit = state === 'empty' ? '' : (spec.unit ?? (id ? data.unit(id) : ''));
-  const ageText = spec.ageText || (ageMs === null ? '—' : age(ageMs));
+  const ageText = spec.ageText || (ageMs === null ? NO_DATA : age(ageMs));
+  const info = spec.info !== undefined ? spec.info : infoFor(spec.label);
 
   // Every card opens a detail view showing the recorder series behind it and
   // the four facts that decide whether the number can be trusted.
@@ -162,6 +169,7 @@ export function entityCard(ctx, spec) {
     note: noteOverride,
     state,
     ageText,
+    info,
     color: spec.color || P.ink,
     bar,
     markColor,
@@ -170,6 +178,7 @@ export function entityCard(ctx, spec) {
 
   return card({
     label: spec.label,
+    info,
     value: text,
     unit,
     size: spec.size,

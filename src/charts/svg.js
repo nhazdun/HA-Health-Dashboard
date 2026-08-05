@@ -224,7 +224,7 @@ export function spark(pts, color, dashed) {
         height: '30px', display: 'flex', alignItems: 'center', fontFamily: MONO,
         fontSize: '9.5px', color: P.off,
       },
-    }, 'ряд ще не набрався');
+    }, 'series not long enough yet');
   }
   const mn = Math.min(...vals), mx = Math.max(...vals), r = (mx - mn) || 1;
   const Y = (v) => hgt - 2 - ((v - mn) / r) * (hgt - 6);
@@ -303,7 +303,7 @@ export function stackChart(o) {
     if (!stack || !stack.parts || !stack.parts.length) {
       kids.push(h('rect', {
         x: pad + i * bw, y: hgt - 26, width: Math.max(1, bw - 2), height: 2, fill: P.s2,
-      }, h('title', (stack && stack.title) || 'немає даних')));
+      }, h('title', (stack && stack.title) || 'no data')));
       return;
     }
     stack.parts.forEach(([v, c]) => {

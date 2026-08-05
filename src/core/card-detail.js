@@ -2,7 +2,7 @@ import { h } from './dom.js';
 import { P, ST } from './tokens.js';
 import { rangeBar } from './ui.js';
 import { lineChart } from '../charts/svg.js';
-import { fmt, age } from './format.js';
+import { fmt, age, NO_DATA } from './format.js';
 import { resample } from './ha.js';
 
 /**
@@ -31,7 +31,8 @@ export function cardDetail(ctx, detail) {
           h('b', detail.label),
           h('span', {
             style: { fontFamily: "'Geist Mono',monospace", fontSize: '11px', color: P.mut },
-          }, detail.source || '—'),
+          }, detail.source || NO_DATA),
+          detail.info ? h('span.info', detail.info) : null,
         ]),
         h('button.hh-x', { type: 'button', onClick: close }, '✕'),
       ]),
@@ -60,9 +61,9 @@ export function cardDetail(ctx, detail) {
               fontFamily: "'Geist Mono',monospace", fontSize: '10px', color: P.off,
             },
           }, [
-            legendSwatch(P.band, '14px', '3px', 'референс'),
-            legendSwatch(P.bandOpt, '14px', '6px', 'оптимум'),
-            legendSwatch(detail.markColor || P.self, '2px', '12px', 'зараз'),
+            legendSwatch(P.band, '14px', '3px', 'reference'),
+            legendSwatch(P.bandOpt, '14px', '6px', 'optimum'),
+            legendSwatch(detail.markColor || P.self, '2px', '12px', 'current'),
           ]),
         ])
         : null,
@@ -73,10 +74,10 @@ export function cardDetail(ctx, detail) {
       ]),
 
       h('div.hh-facts', [
-        fact('Вік даних', detail.ageText || '—', meta.c),
-        fact('Стан довіри', meta.l, meta.c),
-        fact('Джерело', detail.source || '—', P.mut),
-        fact('Застереження', detail.note || '—',
+        fact('Data age', detail.ageText || NO_DATA, meta.c),
+        fact('Trust state', meta.l, meta.c),
+        fact('Source', detail.source || NO_DATA, P.mut),
+        fact('Caveat', detail.note || NO_DATA,
           detail.state === 'dead' || detail.state === 'empty' ? P.alert
             : detail.state === 'ok' ? P.mut : P.warn),
       ]),
@@ -104,17 +105,17 @@ function fact(k, v, c) {
 
 function chartNote(detail, series, loading) {
   if (!detail.entity) {
-    return 'Для цієї метрики немає власної сутності в Home Assistant — вона або обчислена з ряду, '
-      + 'або домен ще без джерела. Тому ряд не будується.';
+    return 'This metric has no entity of its own in Home Assistant. It is either computed from a '
+      + 'series or the domain has no source yet, so there is no trend to draw.';
   }
-  if (loading) return 'Читаю recorder…';
+  if (loading) return 'Reading the recorder…';
   if (!series || !series.rows.length) {
-    return 'Recorder не має жодного запису для цієї сутності за вікно. Порожньо — це не нуль.';
+    return 'The recorder holds no record for this entity in the window. Empty is not zero.';
   }
-  return `${series.rows.length} записів за ${series.label} із recorder’а. `
+  return `${series.rows.length} records over ${series.label} from the recorder. `
     + (detail.state === 'dead' || detail.state === 'stale'
-      ? 'Лінія обривається на останньому довіреному записі, а не вирівнюється в пряму.'
-      : 'Це фактичний ряд, а не згладжена оцінка.');
+      ? 'The line stops at the last trusted record. It does not flatten into a straight line.'
+      : 'This is the actual series and not a smoothed estimate.');
 }
 
 function trendChart(ctx, detail, series, loading) {
@@ -125,8 +126,8 @@ function trendChart(ctx, detail, series, loading) {
         color: P.mut, fontSize: '12px', lineHeight: 1.5,
       },
     }, loading && detail.entity
-      ? 'Читаю recorder…'
-      : `Значення: ${detail.value}${detail.unit ? ' ' + detail.unit : ''}`);
+      ? 'Reading the recorder…'
+      : `Value: ${detail.value}${detail.unit ? ' ' + detail.unit : ''}`);
   }
 
   const rows = series.rows;
@@ -172,7 +173,7 @@ export async function loadCardSeries(ctx, detail) {
   const hours = WINDOW_HOURS[tier];
 
   let rows = await data.series(detail.entity, hours, { significantOnly: false, ttl: 120e3 });
-  let label = tier === 'fast' ? '6 год' : tier === 'hour' ? '48 год' : '30 днів';
+  let label = tier === 'fast' ? '6 h' : tier === 'hour' ? '48 h' : '30 days';
 
   // A daily-cadence sensor may fall outside raw history; fall back to statistics.
   if (rows.length < 2 && tier === 'day') {
@@ -180,7 +181,7 @@ export async function loadCardSeries(ctx, detail) {
     rows = (st[detail.entity] || [])
       .map((r) => ({ t: r.t, v: r.mean ?? r.max ?? r.min }))
       .filter((r) => Number.isFinite(r.v));
-    label = '90 днів (довгострокова статистика)';
+    label = '90 days (long-term statistics)';
   }
 
   const xLabels = rows.length >= 2

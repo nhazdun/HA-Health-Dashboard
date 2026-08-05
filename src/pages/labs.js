@@ -2,7 +2,7 @@ import { h } from '../core/dom.js';
 import { P, MONO } from '../core/tokens.js';
 import { panel, banner, emptyState, rangeBar } from '../core/ui.js';
 import { lineChart } from '../charts/svg.js';
-import { fmt, age, barGeom, rangeStatus, dateOf } from '../core/format.js';
+import { fmt, age, barGeom, rangeStatus, dateOf, NO_DATA } from '../core/format.js';
 import { E, ORNAMENT_META } from '../core/registry.js';
 
 /**
@@ -19,36 +19,36 @@ import { E, ORNAMENT_META } from '../core/registry.js';
  */
 
 const STATUS_LABEL = {
-  ref: 'поза референсом',
-  opt: 'поза оптимумом',
-  in: 'в оптимумі',
-  qual: 'якісний',
+  ref: 'out of reference',
+  opt: 'out of optimum',
+  in: 'in optimum',
+  qual: 'qualitative',
 };
 const STATUS_COLOR = { ref: P.alert, opt: P.warn, in: P.good, qual: P.off };
 
 const FILTERS = [
-  { id: 'ref', label: 'Поза референсом', f: (m) => m.status === 'ref' },
-  { id: 'opt', label: 'Поза оптимумом', f: (m) => m.status === 'opt' || m.status === 'ref' },
-  { id: 'in', label: 'В оптимумі', f: (m) => m.status === 'in' },
-  { id: 'qual', label: 'Якісні', f: (m) => m.status === 'qual' },
-  { id: 'all', label: 'Усі', f: () => true },
+  { id: 'ref', label: 'Out of reference', f: (m) => m.status === 'ref' },
+  { id: 'opt', label: 'Out of optimum', f: (m) => m.status === 'opt' || m.status === 'ref' },
+  { id: 'in', label: 'In optimum', f: (m) => m.status === 'in' },
+  { id: 'qual', label: 'Qualitative', f: (m) => m.status === 'qual' },
+  { id: 'all', label: 'All', f: () => true },
 ];
 
 export default {
   id: 'labs',
-  label: 'Лабораторія',
-  title: 'Лабораторія',
-  question: 'Що в крові й куди воно рухається?',
-  scale: 'квартали',
+  label: 'Labs',
+  title: 'Labs',
+  question: 'What is in the blood, and where is it heading?',
+  scale: 'quarters',
 
   live(ctx) {
     const { data } = ctx;
     const last = data.raw(E.ornLastReport);
-    if (!last) return { color: P.off, label: 'немає звітів' };
+    if (!last) return { color: P.off, label: 'no reports' };
     const months = (Date.now() - new Date(last).getTime()) / (30.44 * 86400e3);
-    if (months > 12) return { color: P.alert, label: `зріз ${Math.round(months)} міс тому` };
-    if (months > 6) return { color: P.warn, label: `зріз ${Math.round(months)} міс тому` };
-    return { color: P.ref, label: `зріз ${Math.round(months)} міс тому` };
+    if (months > 12) return { color: P.alert, label: `snapshot ${Math.round(months)} mo old` };
+    if (months > 6) return { color: P.warn, label: `snapshot ${Math.round(months)} mo old` };
+    return { color: P.ref, label: `snapshot ${Math.round(months)} mo old` };
   },
 
   async load(ctx) {
@@ -61,8 +61,8 @@ export default {
     const out = [];
 
     if (!all.length) {
-      return [emptyState('Інтеграція Ornament не віддає жодного біомаркера. '
-        + 'Перевірте, чи існують сенсори sensor.ornament_nazariy_*.')];
+      return [emptyState('The Ornament integration returns no biomarker. '
+        + 'Check that the sensor.ornament_nazariy_* entities exist.')];
     }
 
     const counts = {};
@@ -72,22 +72,23 @@ export default {
     const ratio = outRef ? (outRef + outOpt) / outRef : null;
 
     // ---------------------------------------------------------------- banner
-    out.push(banner('ПОДВІЙНИЙ ДІАПАЗОН',
-      `${outRef} маркерів поза лабораторним референсом, але ${outRef + outOpt} — поза оптимальним `
-      + `коридором${ratio ? `, різниця в ${fmt(ratio, 1)} раза` : ''}. Це і є головна аналітична цінність `
-      + 'сторінки. Світла смуга — референс, синя суцільна — оптимум, риска — ваше значення.',
+    out.push(banner('DUAL RANGE',
+      `${outRef} markers are outside the laboratory reference and ${outRef + outOpt} are outside the `
+      + `optimal range${ratio ? `, a difference of ${fmt(ratio, 1)} times` : ''}. That gap is the main `
+      + 'analytical value of this page. The pale bar is the reference range, the solid blue bar is the '
+      + 'optimum and the tick is your value.',
       P.warn));
 
     const lastReport = data.raw(E.ornLastReport);
     const oldest = all.filter((m) => m.date).sort((a, b) => a.date.localeCompare(b.date))[0];
     if (lastReport) {
       const months = (Date.now() - new Date(lastReport).getTime()) / (30.44 * 86400e3);
-      out.push(banner('СВІЖІСТЬ',
-        `Останній звіт ${dateOf(lastReport)} (${age(Date.now() - new Date(lastReport).getTime())} тому), `
-        + `у ньому ${data.attr(E.ornLastReport, 'results_in_report') ?? '—'} результатів із `
-        + `${data.attr(E.ornLastReport, 'reports_total') ?? '—'} звітів усього. `
-        + (oldest ? `Найстаріший маркер у списку датований ${oldest.date}. ` : '')
-        + 'Кожен рядок несе власну дату — зріз тут ніколи не однорідний.',
+      out.push(banner('FRESHNESS',
+        `The last report is ${dateOf(lastReport)}, ${age(Date.now() - new Date(lastReport).getTime())} old. `
+        + `It holds ${data.attr(E.ornLastReport, 'results_in_report') ?? NO_DATA} results out of `
+        + `${data.attr(E.ornLastReport, 'reports_total') ?? NO_DATA} reports in total. `
+        + (oldest ? `The oldest marker in the list is dated ${oldest.date}. ` : '')
+        + 'Every row carries its own date, so this snapshot is never uniform.',
         months > 12 ? P.alert : P.ref));
     }
 
@@ -100,7 +101,7 @@ export default {
       }, [h('span', f.label), h('span.n', String(counts[f.id]))])),
       h('input', {
         type: 'search',
-        placeholder: 'пошук маркера…',
+        placeholder: 'search markers…',
         value: state.labQuery,
         onInput: (ev) => ctx.setState({ labQuery: ev.target.value }),
         style: {
@@ -120,7 +121,7 @@ export default {
       || m.entity.includes(q));
 
     if (!rows.length) {
-      out.push(emptyState(`Під фільтр «${active.label}»${q ? ` і запит «${state.labQuery}»` : ''} нічого не підпадає.`));
+      out.push(emptyState(`Nothing matches the "${active.label}" filter${q ? ` and the query "${state.labQuery}"` : ''}.`));
       return out;
     }
 
@@ -132,7 +133,7 @@ export default {
       out.push(h('div.hh-group', [
         h('div.hh-gh', [
           h('b', p),
-          h('span', `${group.length} позицій · ${bad} поза референсом · ${sub} поза оптимумом`),
+          h('span', `${group.length} items · ${bad} out of reference · ${sub} out of optimum`),
         ]),
         ...group.map((m) => row(ctx, m)),
       ]));
@@ -160,8 +161,8 @@ export default {
           color: P.mut, fontSize: '12px', lineHeight: 1.5,
         },
       }, numeric.length === 0 && hist.length
-        ? `Якісний маркер — тренд не будується. Записів в історії: ${hist.length}, останній «${m.raw}».`
-        : `Якісний маркер — тренд не будується. Значення: ${m.raw}`);
+        ? `This marker is qualitative, so the page draws no trend. History holds ${hist.length} records and the last is "${m.raw}".`
+        : `This marker is qualitative, so the page draws no trend. Value: ${m.raw}`);
     } else {
       const vals = numeric.map((r) => r.v);
       const bounds = [...vals, m.refMin, m.refMax, m.optMin, m.optMax].filter(Number.isFinite);
@@ -205,21 +206,21 @@ export default {
         h('div.hh-ddesc', describe(m, hist)),
         h('div', chart),
         h('div.hh-facts', [
-          fact('Референсний діапазон',
+          fact('Reference range',
             Number.isFinite(m.refMin) || Number.isFinite(m.refMax)
-              ? `${fmt(m.refMin)} – ${fmt(m.refMax)}` : '—', P.ref),
-          fact('Оптимальний коридор',
+              ? `${fmt(m.refMin)} – ${fmt(m.refMax)}` : NO_DATA, P.ref),
+          fact('Optimal range',
             Number.isFinite(m.optMin) || Number.isFinite(m.optMax)
-              ? `${fmt(m.optMin)} – ${fmt(m.optMax)}` : 'не визначений', '#2F5580'),
-          fact('Дата забору', m.date || '—', P.mut),
-          fact('Вік результату', m.date
+              ? `${fmt(m.optMin)} – ${fmt(m.optMax)}` : 'not defined', '#2F5580'),
+          fact('Draw date', m.date || NO_DATA, P.mut),
+          fact('Result age', m.date
             ? age(Date.now() - new Date(m.date).getTime())
-            : '—', m.stale ? P.warn : P.good),
-          fact('Вимірювань усього', String(m.count ?? (hist.length || '—')), P.mut),
-          fact('Попереднє значення',
+            : NO_DATA, m.stale ? P.warn : P.good),
+          fact('Measurements in total', String(m.count ?? (hist.length || NO_DATA)), P.mut),
+          fact('Previous value',
             m.prev !== null && m.prev !== undefined
               ? `${fmt(m.prev)}${m.trend ? ` · ${m.trend === 'up' ? '↑' : m.trend === 'down' ? '↓' : '='}` : ''}`
-              : '—',
+              : NO_DATA,
             m.trend === 'up' ? P.warn : m.trend === 'down' ? P.good : P.mut),
         ]),
         h('div.hh-eid', m.entity),
@@ -238,7 +239,7 @@ function row(ctx, m) {
   }, [
     h('div.nm', [
       h('b', m.name),
-      h('span', `${m.date || 'без дати'} · ${m.unit || (m.value === null ? 'якісно' : 'без одиниць')}`),
+      h('span', `${m.date || 'no date'} · ${m.unit || (m.value === null ? 'qualitative' : 'no unit')}`),
     ]),
     h('div.v', { style: { color: m.status === 'ref' ? P.alert : P.ink } }, [
       m.value === null ? shorten(m.raw) : fmt(m.value),
@@ -274,7 +275,7 @@ function row(ctx, m) {
         ]
         : h('span', {
           style: { fontFamily: MONO, fontSize: '9.5px', color: P.off, lineHeight: '14px' },
-        }, m.status === 'qual' ? 'якісний — діапазону немає' : 'діапазон не заданий')),
+        }, m.status === 'qual' ? 'qualitative, no range' : 'no range defined')),
     h('div.st', { style: { color } }, STATUS_LABEL[m.status]),
   ]);
 }
@@ -284,34 +285,34 @@ function fact(k, v, c) {
 }
 
 function shorten(s) {
-  const t = String(s ?? '—');
+  const t = String(s ?? NO_DATA);
   return t.length > 14 ? t.slice(0, 13) + '…' : t;
 }
 
 function describe(m, hist) {
   const bits = [];
   if (m.status === 'ref') {
-    bits.push('Значення виходить за лабораторний референс — це рівень, на якому лабораторія сама '
-      + 'позначає результат як відхилення.');
+    bits.push('The value is outside the laboratory reference. This is the level at which the laboratory '
+      + 'itself flags a result as abnormal.');
   } else if (m.status === 'opt') {
-    bits.push('Значення в межах лабораторного референсу, але поза оптимальним коридором. '
-      + 'Саме такі маркери формують основну масу відхилень і найчастіше лишаються непоміченими.');
+    bits.push('The value is inside the laboratory reference but outside the optimal range. Markers like '
+      + 'this make up most of the deviations and they are the ones that usually go unnoticed.');
   } else if (m.status === 'in') {
-    bits.push('Значення в оптимальному коридорі.');
+    bits.push('The value is inside the optimal range.');
   } else {
-    bits.push('Якісний маркер: результат не число, а категорія, тому діапазони до нього не застосовні.');
+    bits.push('This marker is qualitative: the result is a category and not a number, so ranges do not apply.');
   }
   if (hist.length > 1) {
     const first = hist[0], last = hist[hist.length - 1];
-    bits.push(`В історії ${hist.length} вимірювань, від ${dateOf(first.t)} до ${dateOf(last.t)}.`);
+    bits.push(`History holds ${hist.length} measurements, from ${dateOf(first.t)} to ${dateOf(last.t)}.`);
   } else if (hist.length === 1) {
-    bits.push('Виміряно один раз — тренду ще немає, порівнювати нема з чим.');
+    bits.push('Measured once, so there is no trend yet and nothing to compare against.');
   }
   if (m.stale) {
-    bits.push('Результат старший за 12 місяців: для швидко змінюваних показників його варто '
-      + 'вважати історичним, а не поточним.');
+    bits.push('The result is over 12 months old. For a fast-moving marker treat it as history and not '
+      + 'as the current value.');
   }
-  if (m.synonyms && m.synonyms.length) bits.push(`Синоніми: ${m.synonyms.slice(0, 4).join(', ')}.`);
+  if (m.synonyms && m.synonyms.length) bits.push(`Synonyms: ${m.synonyms.slice(0, 4).join(', ')}.`);
   return bits.join(' ');
 }
 
@@ -349,7 +350,7 @@ function collect(data) {
     out.push({
       entity: id,
       name: shortName(a.friendly_name || id, a.category),
-      panel: a.category || 'Без панелі',
+      panel: a.category || 'No panel',
       biomaterial: a.biomaterial || '',
       unit: a.unit_of_measurement || '',
       value,
@@ -373,7 +374,7 @@ function numOrNull(v) {
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
-/** "Ornament Nazariy Ліпіди Аполіпопротеїн B" → "Аполіпопротеїн B" */
+/** Strip the integration prefix and the panel name from a friendly name. */
 function shortName(friendly, category) {
   let s = String(friendly).replace(/^Ornament\s+\S+\s+/i, '');
   if (category && s.startsWith(category)) s = s.slice(category.length).trim();

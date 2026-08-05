@@ -5,7 +5,7 @@ import { lineChart, spark } from '../charts/svg.js';
 import { resample } from '../core/ha.js';
 import { loadEvents, eventsFor } from '../core/events.js';
 import { controlPanel, nowControls } from '../core/controls.js';
-import { fmt, age, hhmm, clockOf } from '../core/format.js';
+import { fmt, age, hhmm, clockOf, NO_DATA } from '../core/format.js';
 import { E } from '../core/registry.js';
 
 /** Page 1 — the realtime cockpit. Only channels that move faster than a minute. */
@@ -14,18 +14,18 @@ const HOURS = 6;
 
 export default {
   id: 'now',
-  label: 'Зараз',
-  title: 'Зараз',
-  question: 'Що з моїм тілом у цю хвилину?',
-  scale: 'с · хв',
+  label: 'Now',
+  title: 'Now',
+  question: 'What is my body doing this minute?',
+  scale: 's · min',
 
   live(ctx) {
     const cgm = ctx.sourceState('nightscout');
     const polar = ctx.sourceState('polar');
-    if (cgm.state === 'dead') return { color: P.alert, label: 'канал глюкози мертвий' };
-    if (cgm.state === 'stale') return { color: P.warn, label: 'глюкоза відстає' };
-    if (polar.idle) return { color: P.ref, label: 'H10 не вдягнений' };
-    return { color: P.good, label: 'усі швидкі канали живі' };
+    if (cgm.state === 'dead') return { color: P.alert, label: 'glucose channel is dead' };
+    if (cgm.state === 'stale') return { color: P.warn, label: 'glucose is behind' };
+    if (polar.idle) return { color: P.ref, label: 'H10 not worn' };
+    return { color: P.good, label: 'all fast channels live' };
   },
 
   async load(ctx) {
@@ -56,13 +56,15 @@ export default {
     // ---------------------------------------------------------------- banner
     const gAgeMin = data.val(E.glucoseAge);
     if (cgm.state === 'dead' || cgm.state === 'stale') {
-      out.push(banner('МЕРТВИЙ КАНАЛ',
-        `CGM не пише ${age(cgm.ageMs)} (glucose_age ${fmt(gAgeMin, 0)} хв проти порогу 15 хв). `
-        + 'Число на екрані — останній кадр перед розривом, і воно виключене з усіх агрегатів цієї сторінки.',
+      out.push(banner('DEAD CHANNEL',
+        `CAUTION: THE CGM CHANNEL IS DEAD. It wrote nothing for ${age(cgm.ageMs)}. `
+        + `The threshold is 15 min and glucose_age is ${fmt(gAgeMin, 0)} min. `
+        + 'The number on screen is the last frame before the break. This page excludes it from every total.',
         P.alert));
     } else if (cgm.state === 'warn') {
-      out.push(banner('КАНАЛ НЕРІВНОМІРНИЙ',
-        `Останній запис CGM ${age(cgm.ageMs)} тому при кроці 1 хв. Крива нижче має розриви — це пропуски, а не нулі.`,
+      out.push(banner('UNEVEN CHANNEL',
+        `The last CGM record arrived ${age(cgm.ageMs)} ago and the step is 1 min. `
+        + 'The curve below has breaks. A break is a gap and not a zero.',
         P.warn));
     }
 
@@ -77,68 +79,68 @@ export default {
     const trend = data.raw(E.glucoseTrend);
 
     cards.push(entityCard(ctx, {
-      span: 2, size: '44px', label: 'Глюкоза · CGM', entity: E.glucose, dec: 1,
+      span: 2, size: '44px', label: 'Glucose · CGM', entity: E.glucose, dec: 1,
       srcState: gluDead ? 'dead' : cgm.state,
-      ageText: gAgeMin !== null ? `${fmt(gAgeMin, 0)} хв` : age(cgm.ageMs),
-      delta: `тренд ${trend || '—'}\n${pd.glu.length} точок за ${HOURS} год`,
+      ageText: gAgeMin !== null ? `${fmt(gAgeMin, 0)} min` : age(cgm.ageMs),
+      delta: `trend ${trend || NO_DATA}\n${pd.glu.length} points over ${HOURS} h`,
       deltaColor: gluDead ? P.alert : P.good,
       spark: spark(gluPts.slice(-72), gluDead ? P.off : ctx.accent, gluDead),
       ranges: { optMin: 3.9, optMax: 7.8 },
-      source: 'Nightscout · крок 1 хв',
-      note: gluDead ? 'Juggluco відвалився' : null,
+      source: 'Nightscout · 1 min step',
+      note: gluDead ? 'Juggluco stopped writing' : null,
     }));
 
     const hrEnt = data.raw(E.polarHr) !== null ? E.polarHr : E.ouraHr;
     const hrMax = data.val(E.hrMax) || 186;
     const hrVal = data.val(hrEnt);
     cards.push(entityCard(ctx, {
-      label: hrEnt === E.polarHr ? 'Пульс · Polar H10' : 'Пульс · Oura (H10 не вдягнений)',
-      entity: hrEnt, dec: 0, unit: 'уд/хв',
+      label: hrEnt === E.polarHr ? 'Heart rate · Polar H10' : 'Heart rate · Oura (H10 not worn)',
+      entity: hrEnt, dec: 0, unit: 'bpm',
       srcState: hrEnt === E.polarHr ? ctx.sourceState('polar').state : 'lag',
-      delta: hrVal ? `зона ${zone(hrVal, hrMax)} · ${fmt((hrVal / hrMax) * 100, 0)}% HRmax` : '',
+      delta: hrVal ? `zone ${zone(hrVal, hrMax)} · ${fmt((hrVal / hrMax) * 100, 0)}% HRmax` : '',
       deltaColor: hrVal && hrVal / hrMax > 0.7 ? P.warn : P.good,
       spark: spark(pd.hr.slice(-90).map((p) => p.v), ctx.accent),
-      source: hrEnt === E.polarHr ? 'Polar H10 · удар' : 'Oura Ring · PPG',
+      source: hrEnt === E.polarHr ? 'Polar H10 · per beat' : 'Oura Ring · PPG',
     }));
 
     cards.push(entityCard(ctx, {
-      label: 'RMSSD зараз', entity: E.polarRmssd, dec: 0, unit: 'мс',
+      label: 'RMSSD now', entity: E.polarRmssd, dec: 0, unit: 'ms',
       srcState: ctx.sourceState('polar').state,
-      emptyHint: 'H10 не передає — надягніть ремінь',
-      source: 'Polar H10 · RR-інтервали',
+      emptyHint: 'the H10 is not streaming, put the strap on',
+      source: 'Polar H10 · RR intervals',
       ranges: { optMin: 40, optMax: 90 },
     }));
 
     const lastEaten = parseDt(data.raw(E.fwLastEaten));
     const sinceMeal = lastEaten ? (now - lastEaten.getTime()) / 60000 : null;
     cards.push(entityCard(ctx, {
-      label: 'Від останнього прийому їжі',
-      value: sinceMeal, text: sinceMeal === null ? '—' : hhmm(sinceMeal), unit: 'год',
+      label: 'Since last meal',
+      value: sinceMeal, text: sinceMeal === null ? NO_DATA : hhmm(sinceMeal), unit: 'h',
       srcState: sinceMeal === null ? 'empty' : sinceMeal > 16 * 60 ? 'stale' : 'ok',
-      ageText: lastEaten ? clockOf(lastEaten) : '—',
+      ageText: lastEaten ? clockOf(lastEaten) : NO_DATA,
       delta: (data.raw(E.fwLastMeal) || '').slice(0, 70),
-      source: 'Foodwatch · єдиний таймстемп їжі',
+      source: 'Foodwatch · the only meal timestamp',
       entity: E.fwLastEaten,
     }));
 
     const padTime = data.val(E.padTimeDay);
     const padRunning = data.raw(E.padBelt) === 'on' || data.raw(E.padState) === 'running';
     cards.push(entityCard(ctx, {
-      label: 'Доріжка сьогодні', entity: E.padTimeDay, dec: 2, unit: 'год',
+      label: 'Treadmill today', entity: E.padTimeDay, dec: 2, unit: 'h',
       srcState: ctx.sourceState('kingsmith').state,
-      delta: `${fmt(data.val(E.padStepsDay), 0)} кроків · ${fmt(data.val(E.padDistDay), 2)} км\n`
-        + `швидкість ${fmt(data.val(E.padSpeed), 1)} км/год`,
+      delta: `${fmt(data.val(E.padStepsDay), 0)} steps · ${fmt(data.val(E.padDistDay), 2)} km\n`
+        + `speed ${fmt(data.val(E.padSpeed), 1)} km/h`,
       deltaColor: padRunning ? P.good : (padTime > 0.5 ? P.good : P.off),
-      source: 'KingSmith · 5 с',
+      source: 'KingSmith · 5 s',
     }));
 
     const slouch = data.val(E.slouchTime), upright = data.val(E.uprightTime);
     const slouchPct = slouch !== null && upright !== null && slouch + upright > 0
       ? (slouch / (slouch + upright)) * 100 : null;
     cards.push(entityCard(ctx, {
-      label: 'Кут постави', entity: E.postureAngle, dec: 1, unit: '°',
+      label: 'Posture angle', entity: E.postureAngle, dec: 1, unit: '°',
       srcState: ctx.sourceState('upright').state,
-      delta: slouchPct === null ? '' : `${fmt(slouchPct, 1)}% дня згорблено`,
+      delta: slouchPct === null ? '' : `${fmt(slouchPct, 1)}% of the day slouched`,
       deltaColor: slouchPct > 30 ? P.warn : P.good,
       source: 'Upright GO 2',
     }));
@@ -146,16 +148,16 @@ export default {
     // Named by room, not by device: the bedroom carries two sensors, the
     // living room one, and that asymmetry is the point.
     [
-      ['PM2.5 · спальня', E.bedPm25, 'Qingping 7fc5 · спальня', 'qp_bed'],
-      ['PM2.5 · вітальня', E.deskPm25, 'Qingping 554b · робоче місце', 'qp_desk'],
-      ['PM2.5 · спальня, Dyson', E.dysonPm25, 'Dyson лазер · спальня', 'dyson'],
+      ['PM2.5 · bedroom', E.bedPm25, 'Qingping 7fc5 · bedroom', 'qp_bed'],
+      ['PM2.5 · living room', E.deskPm25, 'Qingping 554b · desk', 'qp_desk'],
+      ['PM2.5 · bedroom, Dyson', E.dysonPm25, 'Dyson laser · bedroom', 'dyson'],
     ].forEach(([label, id, src, key]) => {
       const v = data.val(id);
       cards.push(entityCard(ctx, {
-        label, entity: id, dec: 0, unit: 'мкг/м³',
+        label, entity: id, dec: 0, unit: 'µg/m³',
         srcState: ctx.sourceState(key).state,
         ranges: { refMin: 0, refMax: 15, optMin: 0, optMax: 5 },
-        delta: v === null ? '' : v > 15 ? 'вище референсу' : v > 5 ? 'вище оптимуму' : 'в оптимумі',
+        delta: v === null ? '' : v > 15 ? 'above the reference' : v > 5 ? 'above the optimum' : 'inside the optimum',
         deltaColor: v > 15 ? P.alert : v > 5 ? P.warn : P.good,
         source: src,
       }));
@@ -163,48 +165,48 @@ export default {
 
     const water = data.val(E.waterToday);
     cards.push(entityCard(ctx, {
-      label: 'Вода сьогодні', entity: E.waterToday, dec: 0, unit: 'мл',
+      label: 'Water today', entity: E.waterToday, dec: 0, unit: 'mL',
       srcState: ctx.sourceState('hidrate').state,
       ranges: { refMin: 0, refMax: 3000, optMin: 2000, optMax: 3000 },
-      delta: water === null ? '' : `${fmt(data.val(E.sipsToday), 0)} ковтків · ${fmt((water / 2500) * 100, 0)}% цілі`,
+      delta: water === null ? '' : `${fmt(data.val(E.sipsToday), 0)} sips · ${fmt((water / 2500) * 100, 0)}% of target`,
       deltaColor: water !== null && water < 2000 ? P.warn : P.good,
-      source: 'Hidrate Spark · покриття неповне',
-      emptyHint: 'пляшка не на звʼязку',
+      source: 'Hidrate Spark · incomplete coverage',
+      emptyHint: 'the bottle is offline',
     }));
 
     const alertOn = data.byPrefix(E.alertPrefix).filter((id) => data.raw(id) === 'on');
     cards.push(entityCard(ctx, {
-      label: 'Повітряна тривога', value: 1, text: alertOn.length ? 'активна' : 'немає', size: '20px',
+      label: 'Air raid alert', value: 1, text: alertOn.length ? 'active' : 'none', size: '20px',
       unit: '', color: alertOn.length ? P.alert : P.good, srcState: 'ok',
       entity: data.byPrefix(E.alertPrefix)[0],
-      delta: 'коваріата для HRV і сну',
+      delta: 'covariate for HRV and sleep',
       deltaColor: alertOn.length ? P.alert : P.off,
-      source: 'Золочівська громада',
-      note: alertOn.length ? alertOn.map((i) => i.split('_').pop()).join(', ') : 'спокійно',
+      source: 'Zolochiv community',
+      note: alertOn.length ? alertOn.map((i) => i.split('_').pop()).join(', ') : 'quiet',
       noteColor: alertOn.length ? P.alert : P.good,
     }));
 
     cards.push(entityCard(ctx, {
-      label: 'IQOS сьогодні', entity: E.iqosToday, dec: 0, unit: 'стиків',
+      label: 'IQOS today', entity: E.iqosToday, dec: 0, unit: 'sticks',
       srcState: ctx.sourceState('iqos').state,
       ranges: { refMin: 0, refMax: 46, optMin: 0, optMax: 0 },
-      delta: `затяжок ${fmt(data.val(E.iqosPuffs), 0)} · ціль 0`,
+      delta: `${fmt(data.val(E.iqosPuffs), 0)} puffs · target 0`,
       deltaColor: P.warn,
-      source: 'IQOS · ручна синхронізація ±15%',
+      source: 'IQOS · manual sync ±15%',
     }));
 
     out.push(h('div.hh-cards', cards));
 
     // ---------------------------------------------------------------- charts
-    const gluRes = resample(pd.glu, 120, start, now);
+    const gluRes = resample(pd.glu, 120, start, now, { bridgeMinutes: 20 });
     const gluVals = gluRes.filter(Number.isFinite);
     out.push(panel(
-      `Глюкоза за ${HOURS} годин`,
+      `Glucose over ${HOURS} hours`,
       pd.glu.length
-        ? `${pd.glu.length} записів із recorder’а. Розриви на кривій — це реальні пропуски каналу, `
-          + 'вони не заповнюються нулями. Вертикальні пунктири — прийоми їжі та IQOS.'
-        : 'Recorder не віддав жодної точки за це вікно.',
-      'мммоль/л · події',
+        ? `${pd.glu.length} records from the recorder. A break in the curve is a real gap in the channel `
+          + 'and the page does not fill it with zeros. The dashed lines mark meals and IQOS.'
+        : 'The recorder returned no point for this window.',
+      'mmol/L · events',
       pd.glu.length >= 2
         ? lineChart({
           h: 240,
@@ -214,23 +216,23 @@ export default {
           xLabels: axisLabels(start, now, 5),
           series: [{ pts: gluRes, color: gluDead ? P.off : ctx.accent, w: 2, dot: !gluDead, dash: gluDead ? '4 4' : null }],
           thresholds: [
-            { v: 7.8, color: P.warn, label: '7.8 верх діапазону' },
-            { v: 3.9, color: P.ref, label: '3.9 низ' },
+            { v: 7.8, color: P.warn, label: 'upper range 7.8' },
+            { v: 3.9, color: P.ref, label: 'lower 3.9' },
           ],
           events: eventsFor(pd.evts, start, now, ctx),
           showEvents: ctx.state.annotations,
         })
-        : emptyState('Немає даних глюкози за це вікно. Перевірте, чи Juggluco пише в Nightscout.'),
+        : emptyState('There is no glucose data for this window. Check that Juggluco writes into Nightscout.'),
     ));
 
-    const hrRes = resample(pd.hr, 120, start, now);
+    const hrRes = resample(pd.hr, 120, start, now, { bridgeMinutes: 20 });
     out.push(panel(
-      pd.hrFromRing ? 'Пульс за 6 годин · Oura (H10 поза сесією)' : 'Пульс за 6 годин · Polar H10',
+      pd.hrFromRing ? 'Heart rate over 6 hours · Oura (H10 idle)' : 'Heart rate over 6 hours · Polar H10',
       pd.hrFromRing
-        ? 'Нагрудний ремінь пише тільки під час носіння, тому тут ряд Oura. Це різні протоколи — '
-          + 'вони ніколи не усереднюються між собою.'
-        : 'Реалтайм із ременя, крок — удар серця.',
-      'уд/хв',
+        ? 'The chest strap writes only while worn, so this is the ring series. The two protocols differ '
+          + 'and the page never averages them together.'
+        : 'Real time from the strap. The step is one heartbeat.',
+      'bpm',
       pd.hr.length >= 2
         ? lineChart({
           h: 200,
@@ -242,16 +244,16 @@ export default {
           events: eventsFor(pd.evts, start, now, ctx, ['alert', 'iqos']),
           showEvents: ctx.state.annotations,
         })
-        : emptyState('Ані H10, ані Oura не дали ряду пульсу за останні 6 годин.'),
+        : emptyState('Neither the H10 nor the ring returned a heart-rate series for the last 6 hours.'),
     ));
 
     const anyPm = pd.pmBed.length || pd.pmDesk.length || pd.pmDyson.length;
     out.push(panel(
-      'PM2.5 в обох кімнатах',
-      'Дві кімнати, три прилади: у спальні стоять Qingping і Dyson, у вітальні — лише Qingping. '
-      + 'Розходження двох приладів у спальні — це окрема метрика, а не шум, який треба сховати; '
-      + 'пік у вітальні підтвердити нічим.',
-      'спальня · вітальня · спальня Dyson',
+      'PM2.5 across both rooms',
+      'Two rooms and three devices. The bedroom has Qingping and Dyson. The living room has one Qingping. '
+      + 'The gap between the two bedroom devices is a metric and the page shows it. '
+      + 'A peak in the living room cannot be confirmed by anything.',
+      'bedroom · living room · bedroom Dyson',
       anyPm
         ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } }, [
           lineChart({
@@ -262,24 +264,24 @@ export default {
             yTicks: [0, 10, 20, 30],
             xLabels: axisLabels(start, now, 5),
             series: [
-              { pts: resample(pd.pmBed, 90, start, now), color: ctx.accent, w: 1.6 },
-              { pts: resample(pd.pmDesk, 90, start, now), color: P.olive, w: 1.6 },
-              { pts: resample(pd.pmDyson, 90, start, now), color: P.ref, w: 1.6 },
+              { pts: resample(pd.pmBed, 90, start, now, { bridgeMinutes: 25 }), color: ctx.accent, w: 1.6 },
+              { pts: resample(pd.pmDesk, 90, start, now, { bridgeMinutes: 25 }), color: P.olive, w: 1.6 },
+              { pts: resample(pd.pmDyson, 90, start, now, { bridgeMinutes: 25 }), color: P.ref, w: 1.6 },
             ],
             thresholds: [
-              { v: 15, color: P.warn, label: 'референс 15' },
-              { v: 5, color: P.good, label: 'оптимум 5' },
+              { v: 15, color: P.warn, label: 'reference 15' },
+              { v: 5, color: P.good, label: 'optimum 5' },
             ],
             events: eventsFor(pd.evts, start, now, ctx, ['iqos']),
             showEvents: ctx.state.annotations,
           }),
           legendRow([
-            { color: ctx.accent, label: 'спальня · Qingping 7fc5' },
-            { color: P.olive, label: 'вітальня · Qingping 554b' },
-            { color: P.ref, label: 'спальня · Dyson лазер' },
+            { color: ctx.accent, label: 'bedroom · Qingping 7fc5' },
+            { color: P.olive, label: 'living room · Qingping 554b' },
+            { color: P.ref, label: 'bedroom · Dyson laser' },
           ]),
         ])
-        : emptyState('Жоден з трьох сенсорів не віддав ряд PM2.5.'),
+        : emptyState('None of the three sensors returned a PM2.5 series.'),
     ));
 
     return out;

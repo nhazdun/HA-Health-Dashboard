@@ -3,7 +3,7 @@ import { P } from '../core/tokens.js';
 import { entityCard, panel, banner, emptyState, legendRow } from '../core/ui.js';
 import { lineChart } from '../charts/svg.js';
 import { dayKey } from '../core/ha.js';
-import { fmt, age } from '../core/format.js';
+import { fmt, age, NO_DATA } from '../core/format.js';
 import { E } from '../core/registry.js';
 
 /**
@@ -19,17 +19,17 @@ const DAYS = 30;
 
 export default {
   id: 'heart',
-  label: 'Серце й судини',
-  title: 'Серце й судини',
-  question: 'Як тримаються судини?',
-  scale: 'удар · доба',
+  label: 'Heart & vessels',
+  title: 'Heart & vessels',
+  question: 'How are the vessels holding up?',
+  scale: 'beat · day',
 
   live(ctx) {
     const oura = ctx.sourceState('oura');
     const orn = ctx.sourceState('ornament');
-    if (oura.state === 'dead') return { color: P.alert, label: 'Oura мовчить' };
-    if (orn.state === 'dead') return { color: P.warn, label: 'ліпідна панель застаріла' };
-    return { color: P.good, label: 'джерела на місці' };
+    if (oura.state === 'dead') return { color: P.alert, label: 'Oura is silent' };
+    if (orn.state === 'dead') return { color: P.warn, label: 'the lipid panel is stale' };
+    return { color: P.good, label: 'sources in place' };
   },
 
   async load(ctx) {
@@ -52,13 +52,13 @@ export default {
     if (ouraPwv !== null && wPwv !== null) {
       const diff = Math.abs(ouraPwv - wPwv);
       const agree = diff < 1;
-      out.push(banner(agree ? 'ЗГОДА ДЖЕРЕЛ' : 'РОЗБІЖНІСТЬ ДЖЕРЕЛ',
-        `ШПХ: Oura ${fmt(ouraPwv, 2)} м/с, Withings ${fmt(wPwv, 2)} м/с — розбіжність ${fmt(diff, 2)} м/с. `
+      out.push(banner(agree ? 'SOURCES AGREE' : 'SOURCES DISAGREE',
+        `Pulse wave velocity: Oura ${fmt(ouraPwv, 2)} m/s and Withings ${fmt(wPwv, 2)} m/s, a gap of ${fmt(diff, 2)} m/s. `
         + (agree
-          ? 'Два незалежні прилади зійшлися, отже величині можна вірити.'
-          : 'Розбіжність більша за метр на секунду — обидва значення варто вважати орієнтовними.')
-        + (data.unit(E.wPwv) && !/m\/s|м\/с/i.test(data.unit(E.wPwv))
-          ? ` Withings віддає одиницю «${data.unit(E.wPwv)}» — значення сконвертоване тут, у HA воно лишається сирим.`
+          ? 'Two independent devices agree, so the value can be trusted.'
+          : 'The gap is over a metre per second, so treat both values as approximate.')
+        + (data.unit(E.wPwv) && !/m\/s/i.test(data.unit(E.wPwv))
+          ? ` Withings reports the unit "${data.unit(E.wPwv)}". The page converts it here and leaves it raw in Home Assistant.`
           : ''),
         agree ? P.good : P.warn));
     }
@@ -67,61 +67,61 @@ export default {
     const cards = [];
 
     cards.push(entityCard(ctx, {
-      span: 2, size: '40px', label: 'Нічний dipping ratio',
-      value: null, text: '—', unit: '%',
+      span: 2, size: '40px', label: 'Nocturnal dipping ratio',
+      value: null, text: NO_DATA, unit: '%',
       srcState: 'empty',
-      emptyHint: 'манжет цього не дає — потрібен Aktiia з нічним профілем АТ',
+      emptyHint: 'a cuff cannot give this. It needs Aktiia with a night blood-pressure profile',
       delta: '',
-      source: 'єдина унікальна прогалина в стеку',
-      note: 'E17 заблокований залізом',
+      source: 'the one unique gap in the stack',
+      note: 'E17 blocked on hardware',
       noteColor: P.ref,
     }));
 
     cards.push(entityCard(ctx, {
-      label: 'HRV уві сні', entity: E.ouraSleepHrv, dec: 0, unit: 'мс',
-      srcState: ctx.sourceState('oura').state, ageText: 'ранок',
+      label: 'HRV during sleep', entity: E.ouraSleepHrv, dec: 0, unit: 'ms',
+      srcState: ctx.sourceState('oura').state, ageText: 'morning',
       ranges: { optMin: 40, optMax: 90 },
-      delta: `баланс HRV ${fmt(data.val(E.ouraHrvBalance), 0)}`,
+      delta: `HRV balance ${fmt(data.val(E.ouraHrvBalance), 0)}`,
       deltaColor: P.good,
       source: 'Oura · PPG',
-      emptyHint: 'Oura ще не віддала цю ніч',
+      emptyHint: 'Oura has not returned this night yet',
     }));
     cards.push(entityCard(ctx, {
-      label: 'RMSSD ранковий', entity: E.polarRmssd, dec: 0, unit: 'мс',
+      label: 'RMSSD, morning', entity: E.polarRmssd, dec: 0, unit: 'ms',
       srcState: ctx.sourceState('polar').state,
       ranges: { optMin: 40, optMax: 90 },
-      delta: 'протокол 5 хв сидячи (E22)',
-      source: 'Polar H10 · ЕКГ-точність',
-      emptyHint: 'ремінь не вдягнений',
+      delta: '5 min seated protocol (E22)',
+      source: 'Polar H10 · ECG-grade',
+      emptyHint: 'the strap is not worn',
     }));
     cards.push(entityCard(ctx, {
-      label: 'Найнижчий пульс уві сні', entity: E.ouraLowestHr, dec: 0, unit: 'уд/хв',
-      srcState: ctx.sourceState('oura').state, ageText: 'ранок',
+      label: 'Lowest HR asleep', entity: E.ouraLowestHr, dec: 0, unit: 'bpm',
+      srcState: ctx.sourceState('oura').state, ageText: 'morning',
       ranges: { optMin: 45, optMax: 60 },
-      delta: 'найчистіший маркер відновлення',
+      delta: 'the cleanest recovery marker',
       source: 'Oura',
     }));
     cards.push(entityCard(ctx, {
-      label: 'ШПХ · Oura', entity: E.ouraPwv, dec: 2, unit: 'м/с',
-      srcState: ctx.sourceState('oura').state, ageText: 'ранок',
+      label: 'PWV · Oura', entity: E.ouraPwv, dec: 2, unit: 'm/s',
+      srcState: ctx.sourceState('oura').state, ageText: 'morning',
       ranges: { optMin: 5, optMax: 7 },
-      delta: wPwv !== null ? `Withings: ${fmt(wPwv, 2)} м/с` : '',
+      delta: wPwv !== null ? `Withings ${fmt(wPwv, 2)} m/s` : '',
       deltaColor: P.ref,
       source: 'Oura PPG',
     }));
     cards.push(entityCard(ctx, {
-      label: 'Кардіоваскулярний вік', entity: E.ouraCvAge, dec: 0, unit: 'років',
-      srcState: ctx.sourceState('oura').state, ageText: 'ранок',
-      delta: 'композитний бал — лише внутрішньоджерельний тренд',
+      label: 'Cardiovascular age', entity: E.ouraCvAge, dec: 0, unit: 'years',
+      srcState: ctx.sourceState('oura').state, ageText: 'morning',
+      delta: 'a composite score, so read it only against itself',
       deltaColor: P.warn,
       source: 'Oura composite',
     }));
 
     for (const [label, id, ranges] of [
-      ['Коефіцієнт атерогенності', 'sensor.ornament_nazariy_atherogenic_index', null],
+      ['Atherogenic index', 'sensor.ornament_nazariy_atherogenic_index', null],
       ['ApoB', 'sensor.ornament_nazariy_apolipoprotein_b', null],
-      ['Холестерин ЛПНЩ', 'sensor.ornament_nazariy_ldl_cholesterol', null],
-      ['Тригліцериди', 'sensor.ornament_nazariy_triglycerides', null],
+      ['LDL cholesterol', 'sensor.ornament_nazariy_ldl_cholesterol', null],
+      ['Triglycerides', 'sensor.ornament_nazariy_triglycerides', null],
     ]) {
       cards.push(entityCard(ctx, {
         label, entity: id, dec: 2,
@@ -129,15 +129,15 @@ export default {
         ranges: ranges || ornRanges(data, id),
         delta: ornDelta(data, id),
         deltaColor: P.alert,
-        source: 'Ornament · ліпіди',
+        source: 'Ornament · lipids',
       }));
     }
 
     cards.push(entityCard(ctx, {
-      label: 'Нічний SpO₂', entity: E.ouraSpo2, dec: 1, unit: '%',
-      srcState: ctx.sourceState('oura').state, ageText: 'ранок',
+      label: 'Nocturnal SpO₂', entity: E.ouraSpo2, dec: 1, unit: '%',
+      srcState: ctx.sourceState('oura').state, ageText: 'morning',
       ranges: { optMin: 95, optMax: 100 },
-      delta: `індекс порушень дихання ${fmt(data.val(E.ouraBdi), 0)}`,
+      delta: `breathing disturbance index ${fmt(data.val(E.ouraBdi), 0)}`,
       deltaColor: (data.val(E.ouraBdi) ?? 0) > 5 ? P.warn : P.good,
       source: 'Oura',
     }));
@@ -149,11 +149,11 @@ export default {
     const morn = pd.grid[E.polarRmssd] || [];
     const both = [...night, ...morn].filter(Number.isFinite);
     out.push(panel(
-      'HRV: два незалежні канали',
-      `Oura вночі (${night.filter(Number.isFinite).length} діб) і ранковий протокол H10 `
-      + `(${morn.filter(Number.isFinite).length} діб). Дві лінії, ніколи не усереднені — різні протоколи, `
-      + 'різна фізіологія. Розриви — доби без вимірювання.',
-      'Oura ніч · H10 ранок',
+      'HRV: two independent channels',
+      `Oura at night (${night.filter(Number.isFinite).length} days) and the morning H10 protocol `
+      + `(${morn.filter(Number.isFinite).length} days). Keep the two lines apart. The protocols differ and so `
+      + 'does the physiology. A break is a day without a measurement.',
+      'Oura night · H10 morning',
       both.length >= 3
         ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } }, [
           lineChart({
@@ -161,18 +161,18 @@ export default {
             yMin: Math.max(0, Math.floor(Math.min(...both) - 5)),
             yMax: Math.ceil(Math.max(...both) + 5),
             yTicks: ticks(Math.min(...both) - 5, Math.max(...both) + 5),
-            xLabels: [`−${DAYS} д`, `−${Math.round(DAYS * 0.66)}`, `−${Math.round(DAYS * 0.33)}`, 'сьогодні'],
+            xLabels: [`−${DAYS} d`, `−${Math.round(DAYS * 0.66)}`, `−${Math.round(DAYS * 0.33)}`, 'today'],
             series: [
               { pts: night, color: P.ref, w: 1.8, dot: true },
               { pts: morn, color: ctx.accent, w: 1.8, dot: true },
             ],
           }),
           legendRow([
-            { color: P.ref, label: 'Oura — нічна HRV' },
-            { color: ctx.accent, label: 'Polar H10 — ранковий RMSSD' },
+            { color: P.ref, label: 'Oura, nightly HRV' },
+            { color: ctx.accent, label: 'Polar H10, morning RMSSD' },
           ]),
         ])
-        : emptyState('Обидва канали HRV поки без довгострокової статистики за це вікно.'),
+        : emptyState('Neither HRV channel has long-term statistics for this window yet.'),
     ));
 
     // ------------------------------------------------------- resting HR trend
@@ -180,10 +180,10 @@ export default {
     const avgHr = pd.grid[E.ouraHrAvg] || [];
     const hrVals = [...lowest, ...avgHr].filter(Number.isFinite);
     out.push(panel(
-      'Пульс спокою проти денного середнього',
-      'Найнижчий пульс уві сні — найчистіший маркер відновлення; денне середнє показує навантаження. '
-      + 'Разом вони дають ширину «резерву» за добу.',
-      'найнижчий уві сні · денне середнє',
+      'Resting heart rate against the daily mean',
+      'The lowest heart rate asleep is the cleanest recovery marker. The daily mean shows the load. '
+      + 'Together they give the width of the reserve across the day.',
+      'lowest asleep · daily mean',
       hrVals.length >= 3
         ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } }, [
           lineChart({
@@ -191,29 +191,28 @@ export default {
             yMin: Math.max(30, Math.floor(Math.min(...hrVals) - 5)),
             yMax: Math.ceil(Math.max(...hrVals) + 5),
             yTicks: ticks(Math.min(...hrVals) - 5, Math.max(...hrVals) + 5),
-            xLabels: [`−${DAYS} д`, `−${Math.round(DAYS * 0.66)}`, `−${Math.round(DAYS * 0.33)}`, 'сьогодні'],
+            xLabels: [`−${DAYS} d`, `−${Math.round(DAYS * 0.66)}`, `−${Math.round(DAYS * 0.33)}`, 'today'],
             series: [
               { pts: lowest, color: P.ref, w: 1.8, fill: true },
               { pts: avgHr, color: ctx.accent, w: 1.6 },
             ],
           }),
           legendRow([
-            { color: P.ref, label: 'найнижчий уві сні' },
-            { color: ctx.accent, label: 'середній за добу' },
+            { color: P.ref, label: 'lowest asleep' },
+            { color: ctx.accent, label: 'daily mean' },
           ]),
         ])
-        : emptyState('Ряди пульсу за це вікно порожні.'),
+        : emptyState('The heart-rate series are empty for this window.'),
     ));
 
     // ----------------------------------------------- blood pressure placeholder
     out.push(panel(
-      'Нічний профіль АТ — каркас чекає на Aktiia',
-      'Каркас побудований, даних немає і вигадувати їх нема сенсу. Коли зʼявиться прилад, сюди ляже '
-      + 'ступінчаста нічна крива і велика цифра dipping ratio — це єдина метрика в стеку, якої не дає '
-      + 'жоден наявний пристрій.',
-      'порожній каркас',
-      emptyState('Немає джерела нічного артеріального тиску. '
-        + 'BPM Connect дає лише разові вимірювання вдень, dipping ratio з них не рахується.'),
+      'Nocturnal blood pressure: frame waiting for Aktiia',
+      'The frame is ready and the data is not here yet. When the device arrives this holds the stepped '
+      + 'night curve and the dipping ratio. It is the one metric in the stack that no current device gives.',
+      'empty frame',
+      emptyState('There is no source of night blood pressure. BPM Connect gives single daytime readings '
+        + 'only, and a dipping ratio cannot be computed from those.'),
     ));
 
     return out;
@@ -262,13 +261,13 @@ function ornRanges(data, id) {
 
 function ornAge(data, id) {
   const at = data.attr(id, 'measured_at');
-  return at ? age(Date.now() - new Date(at).getTime()) : '—';
+  return at ? age(Date.now() - new Date(at).getTime()) : NO_DATA;
 }
 
 function ornDelta(data, id) {
   const r = ornRanges(data, id);
   const parts = [];
-  if (r.refMax !== null) parts.push(`референс ≤${fmt(r.refMax)}`);
-  if (r.optMax !== null) parts.push(`оптимум ≤${fmt(r.optMax)}`);
+  if (r.refMax !== null) parts.push(`reference ≤${fmt(r.refMax)}`);
+  if (r.optMax !== null) parts.push(`optimum ≤${fmt(r.optMax)}`);
   return parts.join(' · ');
 }

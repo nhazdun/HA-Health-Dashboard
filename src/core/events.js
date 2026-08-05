@@ -29,7 +29,7 @@ export async function loadEvents(ctx, hours) {
     let prev = null;
     for (const r of rows) {
       if (r.s === 'on' && prev !== 'on') {
-        events.push({ t: r.t, label: 'тривога', color: P.alert, kind: 'alert', detail: kind });
+        events.push({ t: r.t, label: 'alert', color: P.alert, kind: 'alert', detail: kind });
       }
       prev = r.s;
     }
@@ -43,7 +43,7 @@ export async function loadEvents(ctx, hours) {
     const t = new Date(r.s.replace(' ', 'T')).getTime();
     if (!Number.isFinite(t) || seen.has(t) || t < start || t > end) continue;
     seen.add(t);
-    events.push({ t, label: 'їжа', color: P.self, kind: 'meal' });
+    events.push({ t, label: 'meal', color: P.self, kind: 'meal' });
   }
 
   // IQOS — the utility meter steps up once per puff batch

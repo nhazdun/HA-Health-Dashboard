@@ -39,13 +39,13 @@ export const SANS = "'Geist', system-ui, -apple-system, 'Segoe UI', Roboto, sans
 
 /** Per-state visual treatment. Mandated by §3.4 of the design brief. */
 export const ST = {
-  ok: { c: P.good, l: 'свіже' },
-  warn: { c: P.warn, l: 'нерівномірно' },
-  low: { c: P.warn, l: 'низька довіра' },
-  lag: { c: P.ref, l: 'лаг за дизайном' },
-  stale: { c: P.warn, l: 'застаріле' },
-  dead: { c: P.alert, l: 'мертве' },
-  empty: { c: P.off, l: 'немає даних' },
+  ok: { c: P.good, l: 'fresh' },
+  warn: { c: P.warn, l: 'uneven' },
+  low: { c: P.warn, l: 'low trust' },
+  lag: { c: P.ref, l: 'lag by design' },
+  stale: { c: P.warn, l: 'stale' },
+  dead: { c: P.alert, l: 'dead' },
+  empty: { c: P.off, l: 'no data' },
 };
 
 export const CSS = `
@@ -108,7 +108,10 @@ export const CSS = `
   display:flex;flex-direction:column;gap:9px;box-shadow:0 1px 3px rgba(120,60,50,.06)}
 .hh-card.span2{grid-column:span 2}
 .hh-card .top{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
-.hh-card .lab{font-size:11.5px;color:${P.mut};line-height:1.35}
+.hh-card .lab{display:flex;align-items:center;gap:6px;font-size:11.5px;color:${P.mut};line-height:1.35}
+.hh-info{flex:0 0 14px;width:14px;height:14px;border:1px solid #D4D4D8;border-radius:50%;color:${P.off};
+  font-family:${MONO};font-size:9.5px;line-height:12px;text-align:center;cursor:help}
+.hh-info:hover{border-color:${P.mut};color:${P.ink2}}
 .hh-card .age{display:flex;align-items:center;gap:5px;font-family:${MONO};font-size:10px;color:${P.off};
   white-space:nowrap}
 .hh-card .mid{display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
@@ -163,6 +166,21 @@ export const CSS = `
   gap:18px;box-shadow:0 12px 40px rgba(120,60,50,.14)}
 .hh-modal .dh{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
 .hh-modal .dh b{font-size:18px;font-weight:600;letter-spacing:-.02em}
+.hh-modal .info{font-size:12.5px;line-height:1.55;color:${P.ink2};max-width:62ch;padding-top:4px}
+
+/* ---------- list modal ---------- */
+.hh-listmodal{width:min(760px,95vw);max-height:88vh;overflow-y:auto;background:${P.surf};
+  border:1px solid ${P.rule};border-radius:16px;padding:26px 28px;display:flex;flex-direction:column;
+  gap:16px;box-shadow:0 12px 40px rgba(120,60,50,.14)}
+.hh-listmodal .note{font-size:12px;color:${P.mut};line-height:1.55;max-width:64ch}
+.hh-lhead,.hh-lrow{display:grid;gap:12px;align-items:center}
+.hh-lhead{padding:0 2px 8px;border-bottom:1px solid ${P.rule};font-size:10.5px;color:${P.mut}}
+.hh-lrow{padding:7px 2px;border-bottom:1px solid ${P.s3}}
+.hh-lrow .nm{font-size:12.5px;color:${P.ink};overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hh-lrow .m,.hh-lhead .m{font-family:${MONO};font-size:11.5px;text-align:right}
+.hh-linkbtn{align-self:flex-start;background:${P.surf};border:1px solid ${P.rule};border-radius:8px;
+  padding:8px 14px;font-family:inherit;font-size:12px;color:${P.ink};cursor:pointer}
+.hh-linkbtn:hover{border-color:${P.off};background:${P.s3}}
 
 /* ---------- room switcher ---------- */
 .hh-rooms{display:flex;align-items:center;gap:14px;flex-wrap:wrap}

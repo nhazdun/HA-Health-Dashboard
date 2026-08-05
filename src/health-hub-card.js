@@ -3,6 +3,7 @@ import { CSS, P, ST } from './core/tokens.js';
 import { HaData } from './core/ha.js';
 import { SOURCES, sourceState, E } from './core/registry.js';
 import { cardDetail, loadCardSeries } from './core/card-detail.js';
+import { listModal } from './core/list-modal.js';
 import { PAGES } from './pages/index.js';
 
 const VERSION = typeof __VERSION__ === 'string' ? __VERSION__ : 'dev';
@@ -13,9 +14,10 @@ const VERSION = typeof __VERSION__ === 'string' ? __VERSION__ : 'dev';
  * Design source: Claude Design project "Health Hub Light".
  * Data source: live Home Assistant state plus the recorder read APIs.
  *
- * This card never writes. It issues no service calls and no recorder
- * mutations; every number on screen is read from `hass.states` or from
- * `history/history_during_period` / `recorder/statistics_during_period`.
+ * The card never mutates the recorder. Every number on screen is read from
+ * `hass.states` or from `history/history_during_period` /
+ * `recorder/statistics_during_period`. The only writes are ordinary service
+ * calls behind the explicit device controls on the Now and Night pages.
  */
 class HealthHubCard extends HTMLElement {
   constructor() {
@@ -29,6 +31,7 @@ class HealthHubCard extends HTMLElement {
       labQuery: '',
       open: null,
       openCard: null,
+      openList: null,
       room: 'bed',
       lag: 0,
       cell: [0, 3],
@@ -67,7 +70,8 @@ class HealthHubCard extends HTMLElement {
     }, 1000);
     this._onKey = (ev) => {
       if (ev.key !== 'Escape') return;
-      if (this.state.openCard) this.setState({ openCard: null });
+      if (this.state.openList) this.setState({ openList: null });
+      else if (this.state.openCard) this.setState({ openCard: null });
       else if (this.state.open) this.setState({ open: null });
     };
     window.addEventListener('keydown', this._onKey);
@@ -97,6 +101,7 @@ class HealthHubCard extends HTMLElement {
     if (pageChanged) {
       this.state.open = null;
       this.state.openCard = null;
+      this.state.openList = null;
       this._loadedFor = null;
       this._load();
     }
@@ -172,7 +177,7 @@ class HealthHubCard extends HTMLElement {
         console.error('[health-hub] render failed', err);
         clear(this._root).appendChild(h('div', {
           style: { padding: '24px', fontFamily: 'monospace', fontSize: '12px', color: P.alert },
-        }, 'health-hub: помилка рендера — ' + String(err && err.message ? err.message : err)));
+        }, 'health-hub: render failed — ' + String(err && err.message ? err.message : err)));
       }
     });
   }
@@ -188,7 +193,7 @@ class HealthHubCard extends HTMLElement {
 
     const body = ready && pageData
       ? page.render(ctx, pageData)
-      : [h('div.hh-empty', { style: { height: '160px' } }, 'читаю recorder…')];
+      : [h('div.hh-empty', { style: { height: '160px' } }, 'Reading the recorder…')];
 
     this._root.appendChild(h('div.hh-main', [
       this._header(ctx, page),
@@ -202,20 +207,14 @@ class HealthHubCard extends HTMLElement {
     if (this.state.openCard) {
       this._root.appendChild(cardDetail(ctx, this.state.openCard));
     }
+    if (this.state.openList) {
+      this._root.appendChild(listModal(ctx, this.state.openList));
+    }
   }
 
   _aside(ctx, page) {
-    const registrySize = this.data.byPrefix(E.ornPrefix).length;
-    const liveSources = SOURCES.filter((s) => {
-      const st = sourceState(s, this.data).state;
-      return st === 'ok' || st === 'lag' || st === 'low';
-    }).length;
-
     return h('aside.hh-aside', [
-      h('div.hh-brand', [
-        h('b', 'Health Stack'),
-        h('span', `${registrySize} біомаркерів · ${liveSources}/${SOURCES.length} джерел живі`),
-      ]),
+      h('div.hh-brand', [h('b', 'Health Stack')]),
       h('nav.hh-nav', PAGES.map((p, i) => h('button.hh-navbtn', {
         type: 'button',
         'aria-current': p.id === page.id ? 'page' : null,
@@ -226,25 +225,9 @@ class HealthHubCard extends HTMLElement {
         h('span.s', p.scale),
       ]))),
       h('div.hh-asidefoot', [
-        h('button.hh-toggle', {
-          type: 'button',
-          onClick: () => this.setState({ annotations: !this.state.annotations }),
-        }, [
-          h('span', 'Шар подій'),
-          h('span', {
-            style: {
-              fontFamily: "'Geist Mono',monospace", fontSize: '10px',
-              color: this.state.annotations ? P.ink : P.off,
-            },
-          }, this.state.annotations ? 'увімк' : 'вимк'),
-        ]),
-        h('div.hh-note', [
-          'Кожне число тут — живий стан із Home Assistant. Ряди будуються з recorder’а: '
-          + 'історія до ~10 днів, довгострокова статистика — далі. Дірки в даних показані як дірки.',
-        ]),
         h('div.hh-note', {
           style: { fontFamily: "'Geist Mono',monospace", fontSize: '9.5px', opacity: 0.75 },
-        }, `health-hub v${VERSION} · read-only`),
+        }, `health-hub v${VERSION}`),
       ]),
     ]);
   }
@@ -257,7 +240,7 @@ class HealthHubCard extends HTMLElement {
         h('span.q', page.question),
       ]),
       h('div.hh-pills', [
-        h('span.hh-pill', `масштаб: ${page.scale}`),
+        h('span.hh-pill', { style: { whiteSpace: 'nowrap' } }, `scale: ${page.scale}`),
         h('span.hh-pill', { style: { color: live.color } }, [
           h('i.hh-dot', { style: { background: live.color } }),
           live.label,
@@ -276,7 +259,7 @@ if (!window.customCards.some((c) => c.type === 'health-hub-card')) {
   window.customCards.push({
     type: 'health-hub-card',
     name: 'Health Hub',
-    description: 'Десятисторінкова аналітична консоль здоров’я на живих даних Home Assistant',
+    description: 'A ten-page analytical health console driven by live Home Assistant data',
     preview: false,
   });
 }

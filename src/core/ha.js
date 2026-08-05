@@ -320,8 +320,16 @@ export function dayKey(ms) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** Resample an ascending {t,v} series onto `n` evenly spaced slots. */
-export function resample(rows, n, start, end) {
+/**
+ * Resample an ascending {t,v} series onto `n` evenly spaced slots.
+ *
+ * `bridgeMinutes` closes gaps shorter than that span by linear interpolation.
+ * Most visible breaks are sampling jitter — a sensor that writes every 5
+ * minutes lands in only some of the slots — and drawing those as holes makes a
+ * healthy channel look broken. A gap longer than the bridge is a real outage
+ * and stays a hole, so a dead channel still reads as dead.
+ */
+export function resample(rows, n, start, end, opts = {}) {
   if (!rows.length) return new Array(n).fill(null);
   const t0 = start ?? rows[0].t;
   const t1 = end ?? rows[rows.length - 1].t;
@@ -332,13 +340,39 @@ export function resample(rows, n, start, end) {
     const i = Math.round(((p.t - t0) / span) * (n - 1));
     if (i >= 0 && i < n && p.v !== null) acc[i].push(p.v);
   }
-  let carry = null;
   for (let i = 0; i < n; i++) {
-    if (acc[i].length) {
-      carry = acc[i].reduce((a, b) => a + b, 0) / acc[i].length;
-      out[i] = carry;
-    } else {
-      out[i] = null; // gaps stay gaps — the brief forbids filling them with zeros
+    out[i] = acc[i].length ? acc[i].reduce((a, b) => a + b, 0) / acc[i].length : null;
+  }
+
+  const bridgeMinutes = opts.bridgeMinutes ?? DEFAULT_BRIDGE_MIN;
+  if (!bridgeMinutes) return out;
+  const slotMinutes = span / (n - 1 || 1) / 60000;
+  return bridgeGaps(out, Math.max(1, Math.floor(bridgeMinutes / Math.max(slotMinutes, 0.0001))));
+}
+
+/** How much of a hole counts as jitter rather than an outage. */
+const DEFAULT_BRIDGE_MIN = 20;
+
+/**
+ * Linearly fill interior runs of nulls no longer than `maxRun` slots. Leading
+ * and trailing gaps are never invented, and a run longer than the limit stays
+ * exactly as it is.
+ */
+export function bridgeGaps(arr, maxRun) {
+  if (!maxRun || maxRun < 1) return arr;
+  const out = arr.slice();
+  let i = 0;
+  while (i < out.length) {
+    if (out[i] !== null) { i++; continue; }
+    const gapStart = i;
+    while (i < out.length && out[i] === null) i++;
+    const before = gapStart - 1, after = i;
+    const runLength = i - gapStart;
+    if (before < 0 || after >= out.length || runLength > maxRun) continue;
+    const a = out[before], b = out[after];
+    if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+    for (let k = 0; k < runLength; k++) {
+      out[gapStart + k] = a + ((b - a) * (k + 1)) / (runLength + 1);
     }
   }
   return out;
