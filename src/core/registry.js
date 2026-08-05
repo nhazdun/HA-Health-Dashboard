@@ -27,11 +27,13 @@ export const SOURCES = [
   },
   {
     key: 'oura',
+    // Cloud-polled: the integration refreshes on its own schedule, so the
+    // honest expectation is tens of minutes, not the sensor's sample rate.
     name: 'Oura Ring',
-    step: 5 * MIN,
-    stepLabel: 'доба / 5 хв',
+    step: 30 * MIN,
+    stepLabel: 'доба / ~30 хв',
     role: 'Ендпоінт сну й відновлення',
-    note: 'Нічні метрики приходять уранці, денні — кожні кілька хвилин.',
+    note: 'Нічні метрики приходять уранці, денні — протягом дня. Це хмарний опит, не реалтайм.',
     prefix: 'sensor.oura_ring_',
   },
   {
@@ -237,14 +239,17 @@ export function sourceState(src, data) {
     if (v !== null) ageMs = v * src.ageOverride.scale;
   }
 
-  if (!live) return { state: 'dead', ageMs, ids, live, total: ids.length };
-  if (ageMs === null) return { state: 'empty', ageMs, ids, live, total: ids.length };
-
-  // A session-based source (chest strap) is idle, not broken, between sessions.
+  // A session-based source (a chest strap) writes only while worn. Between
+  // sessions it reports nothing, and that is the expected state — not a fault.
+  // This has to be decided before the "no live sensors" check, otherwise an
+  // idle strap is permanently and wrongly branded dead.
   if (src.sessionBased) {
     const worn = src.liveWhen ? data.raw(src.liveWhen) === 'on' : false;
     if (!worn) return { state: 'lag', ageMs, ids, live, total: ids.length, idle: true };
   }
+
+  if (!live) return { state: 'dead', ageMs, ids, live, total: ids.length };
+  if (ageMs === null) return { state: 'empty', ageMs, ids, live, total: ids.length };
   if (src.eventBased) return { state: 'ok', ageMs, ids, live, total: ids.length };
 
   const r = ageMs / src.step;

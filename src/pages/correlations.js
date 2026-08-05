@@ -118,8 +118,10 @@ export default {
       return pearson(xs, ys);
     };
 
+    // Open on the strongest pair that actually clears the n threshold, rather
+    // than on a fixed pair that may well be empty.
     const sel = state.cell && state.cell[0] < M.length && state.cell[1] < M.length
-      ? state.cell : [0, Math.min(2, M.length - 1)];
+      ? state.cell : strongestPair(M, stat);
     const selStat = stat(sel[0], sel[1]);
 
     out.push(h('div.hh-panel', [
@@ -211,6 +213,20 @@ export default {
 };
 
 // ------------------------------------------------------------------ helpers
+
+/** Pick the pair with the largest |r| among those meeting the n threshold. */
+function strongestPair(M, stat) {
+  let best = null;
+  for (let i = 0; i < M.length; i++) {
+    for (let j = 0; j < M.length; j++) {
+      if (i === j) continue;
+      const { r, n } = stat(i, j);
+      if (r === null || n < MIN_N) continue;
+      if (!best || Math.abs(r) > best.abs) best = { cell: [i, j], abs: Math.abs(r) };
+    }
+  }
+  return best ? best.cell : [0, Math.min(2, M.length - 1)];
+}
 
 /** Shift Y forward against X by `lag` days, dropping the unpaired ends. */
 function shift(x, y, lag) {
