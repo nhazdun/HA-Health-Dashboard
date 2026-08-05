@@ -24,7 +24,7 @@ export function cardDetail(ctx, detail) {
   const series = ctx.pageData.__cardSeries;
   const loading = series === undefined || series.key !== detail.key;
 
-  return h('div.hh-scrim', { onClick: close }, [
+  return h('div.hh-scrim.is-centred', { onClick: close }, [
     h('div.hh-modal', { onClick: (ev) => ev.stopPropagation() }, [
       h('div.dh', [
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: '5px' } }, [

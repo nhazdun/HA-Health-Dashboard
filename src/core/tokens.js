@@ -211,6 +211,8 @@ svg{display:block;width:100%;overflow:visible}
 /* ---------- drawer ---------- */
 .hh-scrim{position:fixed;inset:0;z-index:60;background:rgba(24,24,27,.32);display:flex;
   align-items:stretch;justify-content:flex-end}
+/* the lab drawer slides in from the edge; the card modal sits centred */
+.hh-scrim.is-centred{align-items:center;justify-content:center;padding:32px}
 .hh-drawer{width:min(560px,94vw);background:${P.surf};border-left:1px solid ${P.rule};padding:26px;
   overflow-y:auto;display:flex;flex-direction:column;gap:18px}
 .hh-drawer .dh{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
