@@ -40,12 +40,23 @@ export default {
       loadEvents(ctx, 7 * 24),
       data.stats(E.glucose, CV_DAYS, 'day', ['mean', 'min', 'max']),
     ]);
+    // Foodwatch keeps only the latest meal in a text helper, but the recorder
+    // kept every previous value — that is where dish names and carb counts for
+    // earlier meals come from.
+    const mealText = data.exists(E.fwLastMeal)
+      ? await data.series(E.fwLastMeal, 7 * 24, { significantOnly: false })
+        .catch(() => [])
+      : [];
+    const mealHistory = data.exists(E.fwLastMeal)
+      ? (await data.history(E.fwLastMeal, 7 * 24, { significantOnly: false }))[E.fwLastMeal] || []
+      : [];
+
     const analysis = analyse(hist);
     const mealTimes = evts.events
       .filter((e) => e.kind === 'meal')
-      .map((e) => ({ t: e.t, label: mealLabel(data, e.t) }));
+      .map((e) => ({ t: e.t, ...describeMeal(data, e.t, mealHistory) }));
     analysis.meals = postprandial(hist, mealTimes, evts.sessions);
-    return { hist, evts, cvStats: cvStats[E.glucose] || [], ...analysis };
+    return { hist, evts, cvStats: cvStats[E.glucose] || [], mealText, ...analysis };
   },
 
   render(ctx, pd) {
@@ -151,6 +162,17 @@ export default {
 
     out.push(h('div.hh-cards', cards));
 
+    // --------------------------------------------------------------- TIR band
+    out.push(panel(
+      'Час у діапазоні — розбивка',
+      pd.tir
+        ? `Одна смуга на всі ${pd.tir.n} записів за ${cover} діб. Клінічна ціль — понад 70% у коридорі `
+          + '3.9–7.8 і менше 4% нижче 3.9. Це та сама вибірка, що й у AGP: доби без покриття в неї не входять.'
+        : 'Немає ряду глюкози, з якого рахувати час у діапазоні.',
+      pd.tir ? `${pd.tir.n} точок` : '',
+      pd.tir ? tirBand(pd.tir, ctx) : emptyState('CGM не дав жодної точки за вікно.'),
+    ));
+
     // ------------------------------------------------------------- AGP chart
     out.push(panel(
       `AGP — перцентильні смуги за ${AGP_DAYS} днів`,
@@ -203,11 +225,45 @@ export default {
           h('div.t', m.label),
           spark(m.pts, m.walked ? P.ref : ctx.accent),
           h('div.v', [
-            h('span', `пік +${fmt(m.rise, 1)}`),
+            h('span', m.carbs !== null ? `${fmt(m.carbs, 0)} г вугл.` : `пік +${fmt(m.rise, 1)}`),
             h('span', { style: { color: m.walked ? P.ref : ctx.accent } }, `AUC ${fmt(m.auc, 1)}`),
           ]),
         ])))
         : emptyState('Перетинів «прийом їжі × ряд глюкози» у вікні recorder’а поки немає.'),
+    ));
+
+    // ------------------------------------------------- personal meal ranking
+    const ranked = (pd.meals || []).filter((m) => m.norm !== null)
+      .sort((a, b) => b.norm - a.norm);
+    const unranked = (pd.meals || []).filter((m) => m.norm === null);
+    out.push(panel(
+      'Персональний глікемічний рейтинг страв',
+      ranked.length
+        ? 'AUC, нормалізований на 10 г вуглеводів. Порівнюються страви, а не окремі події, '
+          + 'тому нормалізація обовʼязкова — без неї великий прийом завжди «гірший» за малий. '
+          + (unranked.length
+            ? `Ще ${unranked.length} прийомів без підпису вуглеводів у Foodwatch — вони не нормалізуються і в рейтинг не входять.`
+            : '')
+        : 'Для рейтингу потрібні прийоми, у яких Foodwatch підписав вуглеводи.',
+      ranked.length ? `${ranked.length} страв` : 'n = 0',
+      ranked.length
+        ? h('div.hh-ranks', ranked.map((m) => {
+          const max = Math.max(...ranked.map((x) => x.norm)) || 1;
+          return h('div.hh-rank', [
+            h('span.n', { title: m.label }, m.label),
+            h('div.b', h('i', {
+              style: {
+                width: `${Math.max(2, (m.norm / max) * 100).toFixed(1)}%`,
+                background: m.norm > max * 0.85 ? P.warn : (m.walked ? P.ref : ctx.accent),
+              },
+            })),
+            h('span.v', `${fmt(m.norm, 2)}`),
+          ]);
+        }))
+        : emptyState(
+          'Жоден прийом у вікні не має підпису вуглеводів. Рейтинг зʼявиться, коли Foodwatch '
+          + 'почне писати БЖУ разом із таймстемпом — це вхідні дані для гіпотези E07.',
+        ),
     ));
 
     // -------------------------------------------------------- CV calendar
@@ -230,6 +286,49 @@ export default {
     return out;
   },
 };
+
+/** Stacked time-in-range strip with the three clinical zones broken out. */
+function tirBand(tir, ctx) {
+  const zones = [
+    { k: 'нижче 3.9', v: tir.below, c: P.alert, target: '< 4%' },
+    { k: '3.9 – 7.8', v: tir.inRange, c: P.good, target: '> 70%' },
+    { k: 'вище 7.8', v: tir.above, c: P.warn, target: '< 25%' },
+  ];
+  return h('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } }, [
+    h('div', {
+      style: {
+        display: 'flex', height: '30px', borderRadius: '6px', overflow: 'hidden',
+        background: P.s2,
+      },
+    }, zones.map((z) => (z.v <= 0 ? null : h('i', {
+      style: {
+        display: 'block', width: `${z.v.toFixed(2)}%`, background: z.c, height: '30px',
+      },
+      title: `${z.k} — ${fmt(z.v, 1)}%`,
+    })))),
+    h('div', {
+      style: {
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: '10px',
+      },
+    }, zones.map((z) => h('div', {
+      style: {
+        display: 'flex', flexDirection: 'column', gap: '3px', borderLeft: `3px solid ${z.c}`,
+        paddingLeft: '10px',
+      },
+    }, [
+      h('span', { style: { fontSize: '11px', color: P.mut } }, z.k),
+      h('span', {
+        style: {
+          fontFamily: "'Geist Mono',monospace", fontSize: '17px', color: P.ink,
+          fontVariantNumeric: 'tabular-nums',
+        },
+      }, `${fmt(z.v, 1)}%`),
+      h('span', {
+        style: { fontFamily: "'Geist Mono',monospace", fontSize: '9.5px', color: P.off },
+      }, `ціль ${z.target}`),
+    ]))),
+  ]);
+}
 
 // ------------------------------------------------------------------ analysis
 
@@ -298,7 +397,13 @@ export function postprandial(hist, mealTimes, sessions) {
       return acc + Math.max(0, ((p.v + win[i - 1].v) / 2) - base) * dt;
     }, 0);
     const walked = (sessions || []).some(([a]) => a >= t0 && a <= t0 + 30 * 60e3);
-    out.push({ label: meal.label || 'прийом їжі', pts, auc, rise: peak - base, walked, t: t0 });
+    out.push({
+      label: meal.label || 'прийом їжі', pts, auc, rise: peak - base, walked, t: t0,
+      carbs: meal.carbs ?? null,
+      // AUC per 10 g of carbohydrate — meals are being compared, not single
+      // events, so normalisation is mandatory. Null when carbs are unknown.
+      norm: Number.isFinite(meal.carbs) && meal.carbs > 0 ? (auc / meal.carbs) * 10 : null,
+    });
   }
   return out.slice(-8);
 }
@@ -377,23 +482,34 @@ function planCarbs(data) {
 }
 
 /**
- * Foodwatch keeps only the *last* meal description in a text helper, so a name
- * is available for the most recent event and older ones fall back to the slot
- * timestamp. Better an honest timestamp than a wrong dish name.
+ * Recover a meal's name and carbohydrate count.
+ *
+ * Foodwatch overwrites one text helper per meal, so the live state only
+ * describes the latest one. The recorder history of that helper carries the
+ * earlier descriptions; match each eating event to the value that was written
+ * closest after it. Where no description is found the meal keeps an honest
+ * timestamp and `carbs: null` rather than a guessed dish.
  */
-function mealLabel(data, t) {
-  const last = data.raw(E.fwLastMeal);
-  const lastT = data.raw(E.fwLastEaten);
-  if (last && lastT) {
-    const lt = new Date(String(lastT).replace(' ', 'T')).getTime();
-    if (Math.abs(lt - t) < 120e3) {
-      const parts = last.split('·');
-      return (parts[1] || parts[0] || last).split('—')[0].trim();
-    }
+function describeMeal(data, t, mealHistory) {
+  let best = null;
+  for (const row of mealHistory) {
+    if (!row.s || row.s === 'unknown' || row.s === '') continue;
+    const dt = row.t - t;
+    if (dt < -120e3 || dt > 15 * 60e3) continue;
+    if (!best || Math.abs(dt) < Math.abs(best.t - t)) best = row;
   }
   const d = new Date(t);
-  return `прийом ${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')} `
+  const stamp = `прийом ${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')} `
     + `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  if (!best) return { label: stamp, carbs: null };
+
+  const txt = String(best.s);
+  const carbsMatch = /В\s*(\d+(?:[.,]\d+)?)\s*г/i.exec(txt);
+  const carbs = carbsMatch ? Number(String(carbsMatch[1]).replace(',', '.')) : null;
+  // "05.08 21:19 · Холодник з креветкою (vecheria) — 238 ккал, Б 38г, Ж 38г, В 14г"
+  const afterDot = txt.includes('·') ? txt.slice(txt.indexOf('·') + 1) : txt;
+  const name = afterDot.split('—')[0].replace(/\([^)]*\)/g, '').trim();
+  return { label: name || stamp, carbs: Number.isFinite(carbs) ? carbs : null };
 }
 
 function startOfToday() {
