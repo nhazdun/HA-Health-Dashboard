@@ -50,14 +50,18 @@ export const ST = {
 
 export const CSS = `
 :host{display:block;font-family:${SANS};color:${P.ink};background:${P.bg};
-  -webkit-font-smoothing:antialiased;--hh-accent:${P.self}}
+  -webkit-font-smoothing:antialiased;--hh-accent:${P.self};
+  /* Home Assistant's app toolbar is fixed above the panel, so anything sticky
+     has to start below it or it scrolls underneath. Outside HA the variable is
+     undefined and the offset collapses to zero. */
+  --hh-top:var(--header-height,0px)}
 *{box-sizing:border-box}
-.hh-root{display:flex;min-height:100vh;background:${P.bg}}
+.hh-root{display:flex;min-height:calc(100vh - var(--hh-top));background:${P.bg}}
 
 /* ---------- sidebar ---------- */
 .hh-aside{width:248px;flex:0 0 248px;background:${P.surf};border-right:1px dashed ${P.rule};
-  padding:22px 14px;display:flex;flex-direction:column;gap:20px;position:sticky;top:0;
-  height:100vh;overflow-y:auto}
+  padding:22px 14px;display:flex;flex-direction:column;gap:20px;position:sticky;
+  top:var(--hh-top);height:calc(100vh - var(--hh-top));overflow-y:auto}
 .hh-brand{display:flex;flex-direction:column;gap:5px;padding:0 8px}
 .hh-brand b{font-size:15px;font-weight:600;letter-spacing:-.015em}
 .hh-brand span{font-size:11px;color:${P.mut};font-family:${MONO}}
@@ -81,9 +85,9 @@ export const CSS = `
 
 /* ---------- header ---------- */
 .hh-main{flex:1;min-width:0;display:flex;flex-direction:column}
-.hh-head{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.72);backdrop-filter:blur(8px);
-  border-bottom:1px dashed ${P.rule};padding:18px 28px;display:flex;align-items:flex-end;
-  justify-content:space-between;gap:20px;flex-wrap:wrap}
+.hh-head{position:sticky;top:var(--hh-top);z-index:20;background:rgba(255,255,255,.92);
+  backdrop-filter:blur(8px);border-bottom:1px dashed ${P.rule};padding:18px 28px;display:flex;
+  align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap}
 .hh-head h1{margin:0;font-size:21px;font-weight:600;letter-spacing:-.02em}
 .hh-head .q{font-size:12.5px;color:${P.mut}}
 .hh-pills{display:flex;align-items:center;gap:8px;font-family:${MONO};font-size:10.5px}
