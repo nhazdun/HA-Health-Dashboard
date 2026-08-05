@@ -10,6 +10,9 @@ const options = {
   format: 'esm',
   target: ['es2020'],
   minify: true,
+  // The UI copy is Ukrainian; without this esbuild escapes every Cyrillic
+  // character to \uXXXX and roughly doubles the size of that text.
+  charset: 'utf8',
   legalComments: 'none',
   banner: {
     js: `/*! Health Hub card v${pkg.version} — Home Assistant custom card. Read-only: renders live entity state, never writes to the recorder. */`,

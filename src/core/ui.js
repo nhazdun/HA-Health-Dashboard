@@ -104,17 +104,26 @@ export function entityCard(ctx, spec) {
   const id = spec.entity;
   const stObj = id ? data.st(id) : null;
   const v = spec.value !== undefined ? spec.value : (id ? data.val(id) : null);
-  const missing = !stObj;
+
+  // A card may be backed by an entity or be a derived metric computed from a
+  // recorder series. Only the former can be "missing from HA" — a derived
+  // metric with a value is simply a value, and must not be struck through.
+  const derived = !id && (spec.value !== undefined || spec.text !== undefined);
+  const missing = !stObj && !derived;
   const unavailable = stObj && (stObj.state === 'unavailable' || stObj.state === 'unknown');
 
   let state = spec.srcState || 'ok';
   let noteOverride = spec.note;
   if (missing) {
     state = 'empty';
-    noteOverride = noteOverride || 'сенсора немає в HA';
+    noteOverride = noteOverride || (spec.emptyHint || 'сенсора немає в HA');
   } else if (unavailable || (v === null && spec.value === undefined && !spec.text)) {
     state = 'empty';
-    noteOverride = noteOverride || (spec.emptyHint || `недоступний з ${age(data.ageMs(id))} тому`);
+    noteOverride = noteOverride || (spec.emptyHint
+      || (id ? `недоступний з ${age(data.ageMs(id))} тому` : 'немає з чого рахувати'));
+  } else if (derived && v === null && (spec.text === undefined || spec.text === '—')) {
+    state = 'empty';
+    noteOverride = noteOverride || spec.emptyHint || 'немає з чого рахувати';
   }
 
   const ranges = spec.ranges || {};

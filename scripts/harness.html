@@ -274,7 +274,10 @@ const hass = {
   },
 };
 
-await import('../dist/health-hub-card.js?v=' + Date.now());
+// Import through a blob URL so the module cache can never serve a stale build.
+const bundleSrc = await fetch('../dist/health-hub-card.js?probe=' + Date.now(), { cache: 'reload' })
+  .then((r) => r.text());
+await import(URL.createObjectURL(new Blob([bundleSrc], { type: 'text/javascript' })));
 const card = document.getElementById('card');
 card.setConfig({ type: 'custom:health-hub-card' });
 card.hass = hass;
