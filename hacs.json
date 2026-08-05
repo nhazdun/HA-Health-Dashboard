@@ -1,0 +1,6 @@
+{
+  "name": "Health Hub",
+  "render_readme": true,
+  "filename": "health-hub-card.js",
+  "homeassistant": "2024.4.0"
+}

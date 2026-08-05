@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<title>Health Hub — локальний стенд</title>
+<style>body{margin:0;font-family:system-ui}#err{position:fixed;bottom:0;left:0;right:0;background:#BE3A2B;
+color:#fff;font:12px monospace;padding:8px;max-height:30vh;overflow:auto;z-index:999;display:none;
+white-space:pre-wrap}</style>
+</head>
+<body>
+<div id="err"></div>
+<health-hub-card id="card"></health-hub-card>
+<script type="module">
+// Offline harness: exercises every page against synthetic-but-shaped state so
+// render crashes surface before the card is ever installed into Home Assistant.
+const errBox = document.getElementById('err');
+const errs = [];
+function report(e) {
+  errs.push(e);
+  errBox.style.display = 'block';
+  errBox.textContent = errs.join('\n\n');
+}
+window.addEventListener('error', (e) => report(e.message + '\n' + (e.error && e.error.stack || '')));
+window.addEventListener('unhandledrejection', (e) => report('rejection: ' + e.reason));
+const origWarn = console.error;
+console.error = (...a) => { report(a.map(String).join(' ')); origWarn(...a); };
+
+const now = Date.now();
+const states = {};
+function add(id, state, attrs = {}, agoMs = 60000) {
+  const iso = new Date(now - agoMs).toISOString();
+  states[id] = {
+    entity_id: id, state: String(state), attributes: attrs,
+    last_changed: iso, last_updated: iso, last_reported: iso,
+  };
+}
+
+// --- fast channels
+add('sensor.glucose', 5.4, { unit_of_measurement: 'mmol/L' }, 40e3);
+add('sensor.glucose_age', 0, { unit_of_measurement: 'min' }, 40e3);
+add('sensor.glucose_trend', 'Flat', {}, 40e3);
+add('sensor.glucose_mgdl', 97, {}, 40e3);
+
+// --- Oura: a mix of live and unavailable, exactly like the real integration
+const oura = {
+  current_heart_rate: 76, minimum_heart_rate: 54, maximum_heart_rate: 113,
+  average_heart_rate: 86.4, steps: 3862, spo2_average: 96.1,
+  breathing_disturbance_index: 0, pulse_wave_velocity: 7.15, cardiovascular_age: 40,
+  hrv_balance_score: 100, sleep_score: 84, readiness_score: 88, sleep_regularity_score: 82,
+  temperature_deviation: -0.37, active_calories: 178, total_calories: 2123,
+};
+for (const [k, v] of Object.entries(oura)) add(`sensor.oura_ring_${k}`, v, {}, 6 * 60e3);
+for (const k of ['total_sleep_duration', 'deep_sleep_duration', 'rem_sleep_duration',
+  'light_sleep_duration', 'awake_time', 'sleep_efficiency', 'sleep_latency',
+  'lowest_sleep_heart_rate', 'average_sleep_hrv', 'average_sleep_heart_rate',
+  'deep_sleep_percentage', 'rem_sleep_percentage', 'time_in_bed']) {
+  add(`sensor.oura_ring_${k}`, 'unavailable', {}, 6 * 60e3);
+}
+add('sensor.oura_ring_bedtime_start', new Date(now - 20 * 3600e3).toISOString(), {}, 6 * 60e3);
+add('sensor.oura_ring_bedtime_end', new Date(now - 12 * 3600e3).toISOString(), {}, 6 * 60e3);
+
+// --- Muse
+add('sensor.muse_deep_sleep', 2.12, {}, 19 * 3600e3);
+add('sensor.muse_rem_sleep', 104.1, {}, 19 * 3600e3);
+add('sensor.muse_light_sleep', 182.2, {}, 19 * 3600e3);
+add('sensor.muse_awake_time', 16, {}, 19 * 3600e3);
+add('sensor.muse_time_asleep', 6.89, {}, 19 * 3600e3);
+add('sensor.muse_alpha_peak_frequency', 10.405, {}, 19 * 3600e3);
+add('sensor.muse_alpha_peak_lifetime_average', 10.41, {}, 19 * 3600e3);
+add('sensor.muse_subscription_days_remaining', 1, {}, 19 * 3600e3);
+add('sensor.muse_sleep_start', new Date(now - 20 * 3600e3).toISOString(), {}, 19 * 3600e3);
+add('sensor.muse_sleep_end', new Date(now - 12 * 3600e3).toISOString(), {}, 19 * 3600e3);
+add('binary_sensor.muse_subscription_active', 'on', {}, 19 * 3600e3);
+
+// --- Polar (idle, not worn)
+for (const k of ['heart_rate', 'hrv_rmssd', 'hrv_sdnn', 'respiration_rate']) {
+  add(`sensor.polar_h10_1d6ea138_${k}`, 'unknown', {}, 3600e3);
+}
+add('binary_sensor.polar_h10_1d6ea138_worn', 'off', {}, 3600e3);
+add('binary_sensor.polar_h10_1d6ea138_streaming', 'off', {}, 3600e3);
+
+// --- Withings
+add('sensor.nh_health_withings_fat_ratio', 24.218, { unit_of_measurement: '%' }, 15 * 3600e3);
+add('sensor.nh_health_withings_muscle_mass', 49.09, { unit_of_measurement: 'kg' }, 15 * 3600e3);
+add('sensor.nh_health_withings_weight', 68.256, { unit_of_measurement: 'kg' }, 15 * 3600e3);
+add('sensor.nh_health_withings_fat_mass', 16.53, { unit_of_measurement: 'kg' }, 15 * 3600e3);
+add('sensor.nh_health_withings_fat_free_mass', 51.73, { unit_of_measurement: 'kg' }, 15 * 3600e3);
+add('sensor.nh_health_withings_bone_mass', 2.64, {}, 15 * 3600e3);
+add('sensor.nh_health_withings_pulse_wave_velocity', 14.7436, { unit_of_measurement: 'mph' }, 15 * 3600e3);
+add('sensor.nh_health_withings_fat_mass_in_torso', 'unknown', {}, 15 * 3600e3);
+add('sensor.body_scan_battery', 'low', {}, 15 * 3600e3);
+
+// --- environment
+const qp = (pfx, t, co2, pm25, pm10, noise, hum, tvoc) => {
+  add(`sensor.${pfx}_temperature`, t, { unit_of_measurement: '°C' }, 4 * 60e3);
+  add(`sensor.${pfx}_co2_density`, co2, { unit_of_measurement: 'ppm' }, 4 * 60e3);
+  add(`sensor.${pfx}_pm25_density`, pm25, { unit_of_measurement: 'µg/m³' }, 4 * 60e3);
+  add(`sensor.${pfx}_pm10_density`, pm10, {}, 4 * 60e3);
+  add(`sensor.${pfx}_noise_decibel`, noise, { unit_of_measurement: 'dB' }, 4 * 60e3);
+  add(`sensor.${pfx}_relative_humidity`, hum, { unit_of_measurement: '%' }, 4 * 60e3);
+  add(`sensor.${pfx}_tvoc_density`, tvoc, {}, 4 * 60e3);
+};
+qp('cgllc_cgs2_7fc5', 23.2, 644, 13, 13, 36, 49.9, 57);
+qp('cgllc_cgs2_554b', 23.7, 719, 17, 18, 42, 51.4, 46);
+const dyson = { pm2_5: 9, pm10: 9, no2: 2, hcho: 0.033, voc: 0.028, indoor_aqi_15_min: 28.5,
+  air_quality_index: 47, outdoor_aqi: 70, dominant_pollutant: 'VOC', temperature: 22.2, hepa_filter_life: 97 };
+for (const [k, v] of Object.entries(dyson)) add(`sensor.dyson_5jb_eu_uka2805a_${k}`, v, {}, 3 * 60e3);
+
+// --- behaviour
+add('sensor.walkingpad_current_speed', 0, {}, 12 * 60e3);
+add('sensor.walkingpad_state', 'standby', {}, 12 * 60e3);
+add('sensor.living_room_hn_walking_pad_kroki_za_den', 5043, {}, 12 * 60e3);
+add('sensor.living_room_hn_walking_pad_trivalist_za_den', 1.55, {}, 12 * 60e3);
+add('sensor.living_room_hn_walking_pad_vidstan_za_den', 3.38, {}, 12 * 60e3);
+add('input_number.iqos_cigarettes_today', 11, {}, 5 * 3600e3);
+add('sensor.c0_69_06_73_9f_d0_iqos_zatiazhki_za_den', 68, {}, 5 * 3600e3);
+add('input_datetime.iqos_last_sync_date', '2026-08-05', {}, 5 * 3600e3);
+add('input_datetime.foodwatch_last_eaten', '2026-08-05 21:19:02', {}, 3 * 3600e3);
+add('input_text.foodwatch_last_meal', '05.08 21:19 · Холодник з креветкою (vecheria) — 238 ккал', {}, 3 * 3600e3);
+add('input_number.foodwatch_eaten_calories_total', 3905, {}, 3 * 3600e3);
+add('input_number.foodwatch_eaten_carbs_total', 355, {}, 3 * 3600e3);
+add('input_number.foodwatch_eaten_protein_total', 193, {}, 3 * 3600e3);
+add('input_number.foodwatch_eaten_fat_total', 198, {}, 3 * 3600e3);
+add('input_text.foodie_obid', 'Гречка, яловічі болі — 480 ккал, Б 38г, Ж 18г, В 48г', {}, 8 * 3600e3);
+add('input_text.foodie_vecheria', 'Крем-суп — 400 ккал, Б 33г, Ж 21г, В 60г', {}, 8 * 3600e3);
+add('input_datetime.foodie_data_ratsionu', '2026-08-06', {}, 8 * 3600e3);
+add('sensor.iphone_anonymous_steps', 2206, {}, 34 * 60e3);
+add('sensor.iphone_anonymous_distance', 1325, {}, 34 * 60e3);
+add('sensor.iphone_anonymous_pressure', 14.579, { unit_of_measurement: 'hPa' }, 34 * 60e3);
+add('sensor.upright_go_2_posture_angle', 95.8, { unit_of_measurement: '°' }, 9 * 60e3);
+add('sensor.nh_health_upright_go_2_slouching_time', 504.18, {}, 9 * 60e3);
+add('sensor.nh_health_upright_go_2_upright_time', 749.77, {}, 9 * 60e3);
+add('binary_sensor.macbook_nh_camera_in_use', 'off', {}, 60e3);
+add('binary_sensor.macbook_nh_active', 'on', {}, 60e3);
+add('sensor.macbook_nh_frontmost_app', 'Claude', {}, 60e3);
+for (const k of ['water_today', 'sips_today', 'refills_today', 'current_fill_percent', 'last_sip_time']) {
+  add(`sensor.h2o00008374_${k}`, 'unknown', {}, 2 * 3600e3);
+}
+for (const k of ['air', 'artillery', 'chemical', 'nuclear', 'unknown', 'urban_fights']) {
+  add(`binary_sensor.zolochivska_teritorialna_gromada_${k}`, k === 'air' ? 'on' : 'off', {}, 30 * 60e3);
+}
+add('input_number.maksimalnii_puls', 186, {}, 86400e3);
+
+// --- Ornament: 40 synthetic markers across several panels, real attribute shape
+const panels = ['Ліпіди', 'Загальний аналіз крові', 'Ферменти крові', 'Вітаміни',
+  'Функція щитоподібної залози', 'Загальний аналіз сечі'];
+for (let i = 0; i < 40; i++) {
+  const panel = panels[i % panels.length];
+  const qualitative = i % 7 === 6;
+  const refMin = 1, refMax = 10, optMin = 3, optMax = 6;
+  const v = 0.5 + (i % 13);
+  add(`sensor.ornament_nazariy_marker_${i}`, qualitative ? (i % 3 ? 'Не виявлено' : 'Виявлено') : v, {
+    biomarker_id: 100 + i,
+    category: panel,
+    biomaterial: 'Сироватка',
+    status: v > refMax ? 'abnormal' : 'normal',
+    is_abnormal: !qualitative && (v > refMax || v < refMin),
+    measured_at: i % 3 ? '2025-08-16T00:00:00+00:00' : '2026-08-01T00:00:00+00:00',
+    measurement_count: 3,
+    reference_min: qualitative ? undefined : refMin,
+    reference_max: qualitative ? undefined : refMax,
+    optimal_min: qualitative ? undefined : optMin,
+    optimal_max: qualitative ? undefined : optMax,
+    normal_options: qualitative ? ['Не виявлено'] : undefined,
+    previous_value: qualitative ? undefined : v * 0.9,
+    trend: 'up',
+    unit_of_measurement: qualitative ? undefined : 'ммоль/л',
+    synonyms: ['Synthetic marker'],
+    history: [
+      { date: '2022-01-13T02:00:00+00:00', value: qualitative ? 'Не виявлено' : v * 0.8 },
+      { date: '2023-08-25T00:00:00+00:00', value: qualitative ? 'Не виявлено' : v * 0.9 },
+      { date: '2025-08-16T00:00:00+00:00', value: qualitative ? 'Не виявлено' : v },
+    ],
+    friendly_name: `Ornament Nazariy ${panel} Маркер ${i}`,
+  }, 3600e3);
+}
+add('sensor.ornament_nazariy_last_lab_report', '2026-08-01T00:00:00+00:00',
+  { results_in_report: 8, reports_total: 15 }, 3600e3);
+add('sensor.ornament_nazariy_abnormal_biomarkers', 24, {}, 3600e3);
+add('sensor.ornament_nazariy_biomarkers_tracked', 163, {}, 3600e3);
+add('sensor.ornament_nazariy_homa_ir', 3.87, {
+  category: 'Функція підшлункової залози', biomarker_id: 39, is_abnormal: true,
+  reference_min: 0.3, reference_max: 1.9, optimal_min: 0.3, optimal_max: 1,
+  measured_at: '2025-08-16T00:00:00+00:00', previous_value: 4.78, trend: 'down',
+  measurement_count: 2, friendly_name: 'Ornament Nazariy Функція підшлункової залози HOMA-IR',
+  history: [{ date: '2022-01-13T02:00:00+00:00', value: 4.78 }, { date: '2025-08-16T00:00:00+00:00', value: 3.87 }],
+}, 3600e3);
+for (const [id, v, ref, opt] of [
+  ['insulin_fasting', 16.2, [2.6, 24.9], [2.6, 5]],
+  ['hemoglobin_a1c', 5.36, [4, 5.6], [4.8, 5.1]],
+  ['glucose_fasting', 5.38, [3.9, 5.5], [4.16, 4.72]],
+  ['atherogenic_index', 5.71, [0, 5], [0, 3]],
+  ['apolipoprotein_b', 1.23, [0, 0.9], [0.52, 0.8]],
+  ['ldl_cholesterol', 3.97, [0, 3.3], [0, 2.6]],
+  ['triglycerides', 2.88, [0, 1.7], [0, 1.1]],
+  ['body_mass_index_averaged', 26.95, [18.5, 30], [20, 25]],
+]) {
+  add(`sensor.ornament_nazariy_${id}`, v, {
+    category: 'Ліпіди', biomarker_id: 1, is_abnormal: v > ref[1],
+    reference_min: ref[0], reference_max: ref[1], optimal_min: opt[0], optimal_max: opt[1],
+    measured_at: '2025-08-16T00:00:00+00:00', measurement_count: 4, previous_value: v * 0.95, trend: 'up',
+    friendly_name: `Ornament Nazariy Ліпіди ${id}`,
+    history: [{ date: '2023-08-25T00:00:00+00:00', value: v * 0.95 }, { date: '2025-08-16T00:00:00+00:00', value: v }],
+  }, 3600e3);
+}
+
+// --- websocket stub: shaped history and statistics
+function fakeHistory(msg) {
+  const out = {};
+  const s = new Date(msg.start_time).getTime(), e = new Date(msg.end_time).getTime();
+  for (const id of msg.entity_ids) {
+    if (id.includes('h2o') || id.includes('polar')) { out[id] = []; continue; }
+    const rows = [];
+    // density scales with the window so the 14-day AGP and meal-window paths
+    // get realistic point counts, not a token 60
+    const isSlow = id.startsWith('binary_sensor') || id.includes('walkingpad_state')
+      || id.includes('foodwatch_last_eaten') || id.includes('zatiazhki');
+    const n = isSlow ? 40 : Math.min(1600, Math.max(60, Math.round(((e - s) / 3600e3) * 12)));
+    for (let i = 0; i < n; i++) {
+      const t = s + ((e - s) * i) / (n - 1);
+      let v;
+      if (id.includes('glucose')) v = 5 + Math.sin(i / 6) * 1.4 + (i % 7) * 0.05;
+      else if (id.includes('pm25')) v = 8 + Math.sin(i / 4) * 5 + (i % 5);
+      else if (id.includes('co2')) v = 550 + Math.sin(i / 8) * 180;
+      else if (id.includes('temperature')) v = 23 + Math.sin(i / 10) * 1.5;
+      else if (id.includes('noise')) v = 35 + (i % 9);
+      else if (id.includes('heart_rate')) v = 60 + Math.sin(i / 5) * 15;
+      else if (id.startsWith('binary_sensor') || id.includes('walkingpad_state')) {
+        rows.push({ lu: t / 1000, s: i % 20 < 3 ? 'on' : 'off' });
+        continue;
+      } else if (id.includes('foodwatch_last_eaten')) {
+        rows.push({ lu: t / 1000, s: new Date(t).toISOString().slice(0, 19).replace('T', ' ') });
+        continue;
+      } else v = 10 + (i % 11);
+      rows.push({ lu: t / 1000, s: String(v.toFixed(2)) });
+    }
+    out[id] = rows;
+  }
+  return out;
+}
+function fakeStats(msg) {
+  const out = {};
+  const s = new Date(msg.start_time).getTime(), e = new Date(msg.end_time).getTime();
+  const days = Math.max(1, Math.round((e - s) / 86400e3));
+  for (const id of msg.statistic_ids) {
+    const rows = [];
+    for (let i = 0; i < days; i++) {
+      if (i % 9 === 4) continue; // deliberate gaps, to exercise the hole rendering
+      const t = s + i * 86400e3;
+      const base = id.includes('fat_ratio') ? 25 - i * 0.02
+        : id.includes('muscle') ? 48.5 + i * 0.01
+          : id.includes('weight') ? 68 + Math.sin(i / 5) * 0.4
+            : id.includes('glucose') ? 5.4 + Math.sin(i / 4) * 0.4
+              : id.includes('deep') ? 1.6 + Math.sin(i / 3) * 0.5
+                : id.includes('awake') ? 30 + (i % 17)
+                  : id.includes('steps') ? 4000 + (i % 13) * 400
+                    : id.includes('iqos') ? Math.max(0, 20 - i * 0.2 + (i % 5))
+                      : id.includes('trivalist') ? Math.max(0, 0.5 + (i % 7) * 0.2)
+                        : 20 + (i % 11);
+      rows.push({ start: t, mean: base, min: base * 0.9, max: base * 1.1, state: base, change: 1 });
+    }
+    out[id] = rows;
+  }
+  return out;
+}
+
+const hass = {
+  states,
+  language: 'uk',
+  callWS: async (msg) => {
+    if (msg.type === 'history/history_during_period') return fakeHistory(msg);
+    if (msg.type === 'recorder/statistics_during_period') return fakeStats(msg);
+    return {};
+  },
+};
+
+await import('../dist/health-hub-card.js?v=' + Date.now());
+const card = document.getElementById('card');
+card.setConfig({ type: 'custom:health-hub-card' });
+card.hass = hass;
+
+// Walk every page, so one run covers all ten render paths.
+const PAGE_IDS = ['now', 'night', 'metab', 'body', 'heart', 'labs', 'env', 'behav', 'corr', 'trust'];
+window.__visit = async (id) => {
+  card.setState({ page: id });
+  await new Promise((r) => setTimeout(r, 700));
+  return errs.length;
+};
+window.__sweep = async () => {
+  for (const id of PAGE_IDS) await window.__visit(id);
+  return { errors: errs.length, detail: errs.slice(0, 6) };
+};
+window.__errs = () => errs;
+</script>
+</body>
+</html>

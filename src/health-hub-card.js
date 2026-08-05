@@ -1,0 +1,257 @@
+import { h, clear } from './core/dom.js';
+import { CSS, P, ST } from './core/tokens.js';
+import { HaData } from './core/ha.js';
+import { SOURCES, sourceState, E } from './core/registry.js';
+import { PAGES } from './pages/index.js';
+
+const VERSION = typeof __VERSION__ === 'string' ? __VERSION__ : 'dev';
+
+/**
+ * <health-hub-card> — a ten-page analytical health console.
+ *
+ * Design source: Claude Design project "Health Hub Light".
+ * Data source: live Home Assistant state plus the recorder read APIs.
+ *
+ * This card never writes. It issues no service calls and no recorder
+ * mutations; every number on screen is read from `hass.states` or from
+ * `history/history_during_period` / `recorder/statistics_during_period`.
+ */
+class HealthHubCard extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this.data = new HaData();
+    this.state = {
+      page: 'now',
+      annotations: true,
+      labFilter: 'opt',
+      labQuery: '',
+      open: null,
+      lag: 0,
+      cell: [0, 3],
+      corrWindow: 45,
+      tick: 0,
+    };
+    this._pageData = {};
+    this._loading = false;
+    this._loadedFor = null;
+    this._raf = null;
+    this._lastPaint = 0;
+  }
+
+  setConfig(config) {
+    this._config = config || {};
+    if (this._config.page) this.state.page = this._config.page;
+  }
+
+  static getConfigElement() { return document.createElement('health-hub-card-editor'); }
+
+  static getStubConfig() { return { type: 'custom:health-hub-card' }; }
+
+  getCardSize() { return 20; }
+
+  set hass(hass) {
+    this.data.setHass(hass);
+    if (!this._mounted) this._mount();
+    this._schedulePaint();
+  }
+
+  connectedCallback() {
+    if (!this._mounted && this.data.hass) this._mount();
+    this._timer = window.setInterval(() => {
+      this.state.tick++;
+      this._schedulePaint();
+    }, 1000);
+  }
+
+  disconnectedCallback() {
+    if (this._timer) window.clearInterval(this._timer);
+    if (this._raf) cancelAnimationFrame(this._raf);
+  }
+
+  _mount() {
+    this._mounted = true;
+    const style = document.createElement('style');
+    style.textContent = CSS;
+    this.shadowRoot.appendChild(style);
+    this._root = h('div.hh-root');
+    this.shadowRoot.appendChild(this._root);
+    this._load();
+  }
+
+  setState(patch) {
+    const pageChanged = patch.page && patch.page !== this.state.page;
+    Object.assign(this.state, patch);
+    if (pageChanged) {
+      this.state.open = null;
+      this._loadedFor = null;
+      this._load();
+    }
+    this._schedulePaint(true);
+  }
+
+  get ctx() {
+    return {
+      data: this.data,
+      state: this.state,
+      pageData: this._pageData,
+      setState: (p) => this.setState(p),
+      accent: (this._config && this._config.accent) || P.self,
+      sourceState: (key) => {
+        const src = SOURCES.find((s) => s.key === key);
+        return src ? sourceState(src, this.data) : { state: 'empty', ageMs: null };
+      },
+      source: (key) => SOURCES.find((s) => s.key === key),
+      E,
+    };
+  }
+
+  async _load() {
+    const page = PAGES.find((p) => p.id === this.state.page);
+    if (!page || !page.load) { this._loadedFor = this.state.page; return; }
+    const forPage = this.state.page;
+    this._loading = true;
+    this._schedulePaint(true);
+    try {
+      const result = await page.load(this.ctx);
+      if (this.state.page === forPage) this._pageData[forPage] = result || {};
+    } catch (err) {
+      console.warn('[health-hub] page load failed', forPage, err);
+      if (this.state.page === forPage) this._pageData[forPage] = { error: String(err) };
+    } finally {
+      if (this.state.page === forPage) {
+        this._loading = false;
+        this._loadedFor = forPage;
+        this._schedulePaint(true);
+      }
+    }
+  }
+
+  _schedulePaint(force) {
+    if (!this._mounted) return;
+    // The header clock ticks every second; heavier repaints are coalesced.
+    const now = Date.now();
+    if (!force && now - this._lastPaint < 900) return;
+    if (this._raf) return;
+    this._raf = requestAnimationFrame(() => {
+      this._raf = null;
+      this._lastPaint = Date.now();
+      try {
+        this._paint();
+      } catch (err) {
+        console.error('[health-hub] render failed', err);
+        clear(this._root).appendChild(h('div', {
+          style: { padding: '24px', fontFamily: 'monospace', fontSize: '12px', color: P.alert },
+        }, 'health-hub: помилка рендера — ' + String(err && err.message ? err.message : err)));
+      }
+    });
+  }
+
+  _paint() {
+    const ctx = this.ctx;
+    const page = PAGES.find((p) => p.id === this.state.page) || PAGES[0];
+    const pageData = this._pageData[page.id];
+    const ready = this._loadedFor === page.id && !this._loading;
+
+    clear(this._root);
+    this._root.appendChild(this._aside(ctx, page));
+
+    const body = ready && pageData
+      ? page.render(ctx, pageData)
+      : [h('div.hh-empty', { style: { height: '160px' } }, 'читаю recorder…')];
+
+    this._root.appendChild(h('div.hh-main', [
+      this._header(ctx, page),
+      h('div.hh-sect', body),
+    ]));
+
+    if (this.state.open && page.drawer) {
+      const drawer = page.drawer(ctx, this.state.open, pageData || {});
+      if (drawer) this._root.appendChild(drawer);
+    }
+  }
+
+  _aside(ctx, page) {
+    const registrySize = this.data.byPrefix(E.ornPrefix).length;
+    const liveSources = SOURCES.filter((s) => {
+      const st = sourceState(s, this.data).state;
+      return st === 'ok' || st === 'lag' || st === 'low';
+    }).length;
+
+    return h('aside.hh-aside', [
+      h('div.hh-brand', [
+        h('b', 'Health Stack'),
+        h('span', `${registrySize} біомаркерів · ${liveSources}/${SOURCES.length} джерел живі`),
+      ]),
+      h('nav.hh-nav', PAGES.map((p, i) => h('button.hh-navbtn', {
+        type: 'button',
+        'aria-current': p.id === page.id ? 'page' : null,
+        onClick: () => this.setState({ page: p.id }),
+      }, [
+        h('span.n', String(i + 1).padStart(2, '0')),
+        h('span.l', p.label),
+        h('span.s', p.scale),
+      ]))),
+      h('div.hh-asidefoot', [
+        h('button.hh-toggle', {
+          type: 'button',
+          onClick: () => this.setState({ annotations: !this.state.annotations }),
+        }, [
+          h('span', 'Шар подій'),
+          h('span', {
+            style: {
+              fontFamily: "'Geist Mono',monospace", fontSize: '10px',
+              color: this.state.annotations ? P.ink : P.off,
+            },
+          }, this.state.annotations ? 'увімк' : 'вимк'),
+        ]),
+        h('div.hh-note', [
+          'Кожне число тут — живий стан із Home Assistant. Ряди будуються з recorder’а: '
+          + 'історія до ~10 днів, довгострокова статистика — далі. Дірки в даних показані як дірки.',
+        ]),
+        h('div.hh-note', {
+          style: { fontFamily: "'Geist Mono',monospace", fontSize: '9.5px', opacity: 0.75 },
+        }, `health-hub v${VERSION} · read-only`),
+      ]),
+    ]);
+  }
+
+  _header(ctx, page) {
+    const live = page.live ? page.live(ctx) : { color: P.good, label: 'ok' };
+    return h('header.hh-head', [
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: '3px' } }, [
+        h('h1', page.title),
+        h('span.q', page.question),
+      ]),
+      h('div.hh-pills', [
+        h('span.hh-pill', `масштаб: ${page.scale}`),
+        h('span.hh-pill', { style: { color: live.color } }, [
+          h('i.hh-dot', { style: { background: live.color } }),
+          live.label,
+        ]),
+      ]),
+    ]);
+  }
+}
+
+if (!customElements.get('health-hub-card')) {
+  customElements.define('health-hub-card', HealthHubCard);
+}
+
+window.customCards = window.customCards || [];
+if (!window.customCards.some((c) => c.type === 'health-hub-card')) {
+  window.customCards.push({
+    type: 'health-hub-card',
+    name: 'Health Hub',
+    description: 'Десятисторінкова аналітична консоль здоров’я на живих даних Home Assistant',
+    preview: false,
+  });
+}
+
+console.info(
+  `%c HEALTH-HUB %c v${VERSION} `,
+  `background:${P.self};color:#fff;font-weight:600;border-radius:3px 0 0 3px;padding:2px 6px`,
+  `background:${P.ref};color:#fff;border-radius:0 3px 3px 0;padding:2px 6px`,
+);
+
+export { ST };
