@@ -37,6 +37,19 @@ export function emptyState(text) {
 }
 
 /**
+ * A heading row inside the card grid. It spans the full width, so a long page
+ * of cards reads as a few labelled sections rather than one undifferentiated
+ * wall of numbers.
+ */
+export function cardHeading(title, sub) {
+  return h('div.hh-cardhead', [
+    h('span.t', title),
+    sub ? h('span.s', sub) : null,
+    h('span.rule'),
+  ]);
+}
+
+/**
  * @param {object} o
  *  label, value (string), unit, size, state ('ok'|'warn'|'low'|'lag'|'stale'|'dead'|'empty'),
  *  ageText, delta, deltaColor, spark (Node), bar (from barGeom), markColor,

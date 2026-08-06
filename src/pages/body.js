@@ -1,7 +1,7 @@
 import { h } from '../core/dom.js';
 import { P } from '../core/tokens.js';
-import { entityCard, panel, banner, emptyState, legendRow } from '../core/ui.js';
-import { lineChart } from '../charts/svg.js';
+import { entityCard, panel, banner, emptyState, legendRow, cardHeading } from '../core/ui.js';
+import { lineChart, spark } from '../charts/svg.js';
 import { dayKey } from '../core/ha.js';
 import { fmt, age, rolling, mean, NO_DATA } from '../core/format.js';
 import { E } from '../core/registry.js';
@@ -34,9 +34,16 @@ export default {
   async load(ctx) {
     const { data } = ctx;
     const ids = [E.wFat, E.wMuscle, E.wWeight, E.wFatFree, E.wBone].filter((id) => data.exists(id));
-    const stats = await data.stats(ids, DAYS, 'day', ['mean', 'min', 'max']);
-    const grid = buildGrid(stats, ids, DAYS);
-    return { stats, grid, ids };
+    const postureIds = [E.slouchTime, E.uprightTime].filter((id) => data.exists(id));
+    const [stats, postureStats] = await Promise.all([
+      data.stats(ids, DAYS, 'day', ['mean', 'min', 'max']),
+      postureIds.length ? data.stats(postureIds, DAYS, 'day', ['max', 'mean']) : {},
+    ]);
+    return {
+      stats, ids,
+      grid: buildGrid(stats, ids, DAYS),
+      posture: buildGrid(postureStats, postureIds, DAYS),
+    };
   },
 
   render(ctx, pd) {
@@ -67,6 +74,7 @@ export default {
       ranges: { optMin: 10, optMax: 20 },
       delta: trendText(fatRoll, 'points'),
       deltaColor: trendColor(fatRoll, true),
+      spark: spark(fatRoll, ctx.accent),
       source: 'Withings · bioimpedance',
       note: 'a single weigh-in means nothing',
       entity: E.wFat,
@@ -78,6 +86,7 @@ export default {
       srcState: w.state, ageText: age(data.ageMs(E.wMuscle)),
       delta: trendText(musRoll, 'kg'),
       deltaColor: trendColor(musRoll, false),
+      spark: spark(musRoll, P.ref),
       source: 'Withings',
     }));
     cards.push(entityCard(ctx, {
@@ -85,6 +94,7 @@ export default {
       srcState: w.state, ageText: age(data.ageMs(E.wWeight)),
       delta: trendText(rolling(pd.grid[E.wWeight] || [], 7), 'kg'),
       deltaColor: P.off,
+      spark: spark(rolling(pd.grid[E.wWeight] || [], 7), ctx.accent),
       source: 'Withings',
     }));
     cards.push(entityCard(ctx, {
@@ -131,6 +141,53 @@ export default {
       noteColor: P.ref,
     }));
 
+    // ------------------------------------------------------------- posture
+    const slouchDaily = slouchShare(pd.posture);
+    const slouchRoll = rolling(slouchDaily, 7);
+    const slouchNow = data.val(E.slouchTime);
+    const uprightNow = data.val(E.uprightTime);
+    const slouchPct = slouchNow !== null && uprightNow !== null && slouchNow + uprightNow > 0
+      ? (slouchNow / (slouchNow + uprightNow)) * 100 : null;
+
+    cards.push(cardHeading('Posture', 'the other half of body composition, and the one you can change today'));
+    cards.push(entityCard(ctx, {
+      span: 2, size: '34px', label: 'Time slouched',
+      value: slouchPct, text: slouchPct === null ? NO_DATA : fmt(slouchPct, 1),
+      unit: '% of the tracked day',
+      entity: E.slouchTime,
+      srcState: slouchPct === null ? 'empty' : ctx.sourceState('upright').state,
+      ranges: { refMin: 0, refMax: 100, optMin: 0, optMax: 20 },
+      delta: slouchPct === null ? '' :
+        `${fmt(slouchNow, 1)} slouched / ${fmt(uprightNow, 1)} upright min`
+        + (lastFinite(slouchRoll) !== null ? `\n7-day mean ${fmt(lastFinite(slouchRoll), 1)}%` : ''),
+      deltaColor: P.warn,
+      spark: spark(slouchRoll, ctx.accent),
+      source: 'Upright GO 2',
+      emptyHint: 'the posture sensor is not reporting',
+    }));
+    cards.push(entityCard(ctx, {
+      label: 'Posture angle now', entity: E.postureAngle, dec: 1, unit: '°',
+      srcState: ctx.sourceState('upright').state,
+      ranges: { refMin: 0, refMax: 45, optMin: 0, optMax: 10 },
+      delta: 'optimum 0 to 10°',
+      deltaColor: (data.val(E.postureAngle) ?? 0) > 10 ? P.warn : P.good,
+      source: 'Upright GO 2',
+    }));
+    cards.push(entityCard(ctx, {
+      label: 'Slouch trend',
+      value: slouchTrend(slouchRoll),
+      text: slouchTrend(slouchRoll) === null ? NO_DATA
+        : `${slouchTrend(slouchRoll) >= 0 ? '+' : '−'}${fmt(Math.abs(slouchTrend(slouchRoll)), 1)}`,
+      unit: `points, ${DAYS} d`, size: '22px',
+      srcState: slouchTrend(slouchRoll) === null ? 'empty' : 'ok',
+      ageText: `${slouchDaily.filter(Number.isFinite).length} days`,
+      color: (slouchTrend(slouchRoll) ?? 0) < 0 ? P.good : P.warn,
+      delta: 'change of the 7-day rolling share',
+      deltaColor: (slouchTrend(slouchRoll) ?? 0) < 0 ? P.good : P.warn,
+      source: 'Upright GO 2',
+      emptyHint: 'not enough days with a posture record',
+    }));
+
     out.push(h('div.hh-cards', cards));
 
     // ------------------------------------------------------------ main chart
@@ -171,6 +228,35 @@ export default {
         : emptyState(
           `The long-term statistics hold ${fatObs} weigh-ins over ${DAYS} days. `
           + 'Hypothesis E23 needs a daily cadence, otherwise the trend stays buried in the impedance noise.',
+        ),
+    ));
+
+    // ------------------------------------------------------- slouch trend
+    const slouchVals = slouchDaily.filter(Number.isFinite);
+    out.push(panel(
+      `Slouch share trend over ${DAYS} days`,
+      slouchVals.length >= 5
+        ? 'The thin line is the daily share, the thick line the 7-day rolling mean. Posture is the one '
+          + 'body metric that answers within a day, so unlike the impedance trend above it is worth '
+          + 'reading week by week.'
+        : 'A posture trend needs several days with a slouch record.',
+      'daily and 7-day mean',
+      slouchVals.length >= 5
+        ? lineChart({
+          h: 220,
+          yMin: Math.max(0, Math.floor(Math.min(...slouchVals) - 5)),
+          yMax: Math.ceil(Math.max(...slouchVals) + 5),
+          yTicks: ticks(Math.min(...slouchVals) - 5, Math.max(...slouchVals) + 5),
+          xLabels: [`−${DAYS} d`, `−${Math.round(DAYS * 0.66)}`, `−${Math.round(DAYS * 0.33)}`, 'today'],
+          series: [
+            { pts: slouchDaily, color: ctx.accent, w: 0.9, op: 0.3 },
+            { pts: slouchRoll, color: ctx.accent, w: 2.2, dot: true },
+          ],
+          thresholds: [{ v: 20, color: P.good, label: 'target 20%' }],
+        })
+        : emptyState(
+          `The long-term statistics hold ${slouchVals.length} days with a posture record. `
+          + 'A few more days and the rolling mean becomes readable.',
         ),
     ));
 
@@ -243,6 +329,24 @@ function trendColor(roll, lowerIsBetter) {
   const d = vals[vals.length - 1] - vals[0];
   if (Math.abs(d) < 0.2) return P.off;
   return (d < 0) === !!lowerIsBetter ? P.good : P.warn;
+}
+
+/** Daily slouch share from the paired slouch/upright minute counters. */
+function slouchShare(grid) {
+  const slouch = grid[E.slouchTime] || [];
+  const upright = grid[E.uprightTime] || [];
+  return slouch.map((v, i) => {
+    const u = upright[i];
+    if (!Number.isFinite(v) || !Number.isFinite(u) || v + u <= 0) return null;
+    return (v / (v + u)) * 100;
+  });
+}
+
+function slouchTrend(roll) {
+  const vals = roll.filter(Number.isFinite);
+  if (vals.length < 5) return null;
+  const take = Math.max(1, Math.floor(vals.length * 0.2));
+  return mean(vals.slice(-take)) - mean(vals.slice(0, take));
 }
 
 function ticks(lo, hi) {

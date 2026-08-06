@@ -141,7 +141,7 @@ add('sensor.iphone_anonymous_steps', 2206, {}, 34 * 60e3);
 add('sensor.iphone_anonymous_distance', 1325, {}, 34 * 60e3);
 add('sensor.iphone_anonymous_pressure', 14.579, { unit_of_measurement: 'hPa' }, 34 * 60e3);
 add('sensor.upright_go_2_posture_angle', 95.8, { unit_of_measurement: '°' }, 9 * 60e3);
-add('sensor.nh_health_upright_go_2_slouching_time', 504.18, {}, 9 * 60e3);
+add('sensor.nh_health_upright_go_2_slouching_time', 504.18, { state_class: 'measurement' }, 9 * 60e3);
 add('sensor.nh_health_upright_go_2_upright_time', 749.77, {}, 9 * 60e3);
 add('binary_sensor.macbook_nh_camera_in_use', 'off', {}, 60e3);
 add('binary_sensor.macbook_nh_active', 'on', {}, 60e3);
@@ -313,7 +313,8 @@ card.setConfig({ type: 'custom:health-hub-card' });
 card.hass = hass;
 
 // Walk every page, so one run covers all ten render paths.
-const PAGE_IDS = ['now', 'night', 'metab', 'body', 'heart', 'labs', 'env', 'behav', 'corr', 'trust'];
+const PAGE_IDS = ['now', 'work', 'night', 'metab', 'body', 'heart', 'labs', 'env', 'behav',
+  'corr', 'trust', 'targets'];
 window.__visit = async (id) => {
   card.setState({ page: id });
   await new Promise((r) => setTimeout(r, 700));

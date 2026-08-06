@@ -1,7 +1,7 @@
 import { h } from '../core/dom.js';
 import { P } from '../core/tokens.js';
 import { entityCard, panel, banner, emptyState, legendRow } from '../core/ui.js';
-import { lineChart } from '../charts/svg.js';
+import { lineChart, spark } from '../charts/svg.js';
 import { dayKey } from '../core/ha.js';
 import { fmt, age, NO_DATA } from '../core/format.js';
 import { E } from '../core/registry.js';
@@ -83,6 +83,7 @@ export default {
       ranges: { optMin: 40, optMax: 90 },
       delta: `HRV balance ${fmt(data.val(E.ouraHrvBalance), 0)}`,
       deltaColor: P.good,
+      spark: spark(pd.grid[E.ouraSleepHrv] || [], ctx.accent),
       source: 'Oura · PPG',
       emptyHint: 'Oura has not returned this night yet',
     }));

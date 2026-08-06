@@ -187,7 +187,77 @@ export function scatterChart(o) {
   return svg(w, hgt, kids);
 }
 
-/** Calendar heatmap. `cells[i].color === null` renders as an explicit gap. */
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DOW = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+/**
+ * A real calendar, not an abstract grid: columns are weeks, rows are weekdays,
+ * month boundaries are labelled and every cell knows its own date. Hovering a
+ * cell tells you which day it is, which the old anonymous grid could not.
+ *
+ * `values` is one entry per day ending at `end`; `null` means the day has no
+ * data and renders as an outlined hole rather than as a low value.
+ */
+export function calendarChart(o) {
+  const vals = o.values;
+  const n = vals.length;
+  const end = o.end ? new Date(o.end) : new Date();
+  end.setHours(12, 0, 0, 0);
+
+  const days = vals.map((v, i) => {
+    const d = new Date(end);
+    d.setDate(d.getDate() - (n - 1 - i));
+    return { v, d, dow: (d.getDay() + 6) % 7 };
+  });
+  const lead = days.length ? days[0].dow : 0;
+  const cols = Math.ceil((lead + n) / 7);
+  const cw = o.cw || 15, gap = 3, left = 34, top = 18;
+  const w = left + cols * (cw + gap) + 4;
+  const hgt = top + 7 * (cw + gap) + 34;
+  const kids = [];
+
+  DOW.forEach((l, i) => {
+    if (i % 2) return;
+    kids.push(h('text', {
+      x: left - 6, y: top + i * (cw + gap) + 11, textAnchor: 'end',
+      fill: P.off, fontSize: 8.5, fontFamily: MONO,
+    }, l));
+  });
+
+  let lastMonth = -1;
+  days.forEach((day, i) => {
+    const col = Math.floor((lead + i) / 7);
+    if (day.d.getMonth() !== lastMonth && day.dow <= 3) {
+      lastMonth = day.d.getMonth();
+      kids.push(h('text', {
+        x: left + col * (cw + gap), y: top - 6, fill: P.mut, fontSize: 9, fontFamily: MONO,
+      }, MONTHS[day.d.getMonth()]));
+    }
+    const empty = day.v === null || day.v === undefined;
+    kids.push(h('rect', {
+      x: left + col * (cw + gap), y: top + day.dow * (cw + gap),
+      width: cw, height: cw, rx: 3,
+      fill: empty ? P.bg : o.color(day.v),
+      stroke: i === n - 1 ? P.ink : (empty ? P.rule : 'none'),
+      strokeWidth: i === n - 1 ? 1.4 : 1,
+    }, h('title', `${DOW[day.dow]}, ${MONTHS[day.d.getMonth()]} ${day.d.getDate()}: `
+      + (empty ? 'no data' : o.label(day.v)))));
+  });
+
+  const ly = top + 7 * (cw + gap) + 16;
+  kids.push(h('text', { x: left, y: ly + 9, fill: P.off, fontSize: 8.5, fontFamily: MONO }, o.legendLow));
+  (o.scale || []).forEach((c, i) => kids.push(h('rect', {
+    x: left + 76 + i * (cw + 3), y: ly, width: cw, height: cw - 3, rx: 2.5, fill: c,
+  })));
+  kids.push(h('text', {
+    x: left + 76 + (o.scale || []).length * (cw + 3) + 6, y: ly + 9,
+    fill: P.off, fontSize: 8.5, fontFamily: MONO,
+  }, o.legendHigh));
+
+  return svg(w, hgt, kids, { style: `width:100%;max-width:${Math.round(w * 1.25)}px` });
+}
+
+/** Legacy heatmap. `cells[i].color === null` renders as an explicit gap. */
 export function heatmap(o) {
   const cw = o.cw || 13, ch = o.ch || 13, gap = 2.5, left = o.left ?? 52;
   const w = o.cols * (cw + gap) + left + 6;

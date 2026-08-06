@@ -32,6 +32,15 @@ const METRICS = [
   { key: 'iqos', label: 'IQOS', entity: E.iqosToday, agg: 'max', unit: 'sticks' },
   { key: 'pad', label: 'Treadmill', entity: E.padTimeDay, agg: 'max', unit: 'h' },
   { key: 'steps', label: 'Steps', entity: E.ouraSteps, agg: 'max', unit: 'steps' },
+  { key: 'rem', label: 'REM', entity: E.ouraRem, agg: 'max', unit: 'h' },
+  { key: 'latency', label: 'Latency', entity: E.ouraLatency, agg: 'mean', unit: 'min' },
+  { key: 'spo2', label: 'SpO₂', entity: E.ouraSpo2, agg: 'mean', unit: '%' },
+  { key: 'noise', label: 'Bedroom noise', entity: E.bedNoise, agg: 'max', unit: 'dB' },
+  { key: 'hum', label: 'Bedroom humidity', entity: E.bedHum, agg: 'mean', unit: '%' },
+  { key: 'deskCo2', label: 'Desk CO₂', entity: E.deskCo2, agg: 'max', unit: 'ppm' },
+  { key: 'water', label: 'Water', entity: E.waterToday, agg: 'max', unit: 'mL' },
+  { key: 'slouch', label: 'Slouch time', entity: E.slouchTime, agg: 'max', unit: 'min' },
+  { key: 'fat', label: 'Body fat', entity: E.wFat, agg: 'mean', unit: '%' },
 ];
 
 export default {
@@ -151,6 +160,7 @@ export default {
       h('div.hh-corr', [
         h('div', matrixChart({
           labels: M.map((m) => m.label),
+          cw: 22, off: 124,
           selected: sel,
           onPick: (i, j) => ctx.setState({ cell: [i, j] }),
           cell: (i, j) => {

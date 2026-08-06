@@ -2,14 +2,27 @@ import { h, clear } from './core/dom.js';
 import { CSS, P, ST } from './core/tokens.js';
 import { HaData } from './core/ha.js';
 import { SOURCES, sourceState, E } from './core/registry.js';
-import { cardDetail, loadCardSeries } from './core/card-detail.js';
+import { cardDetail, loadCardSeries, defaultRange } from './core/card-detail.js';
 import { listModal } from './core/list-modal.js';
+import { loadTargets } from './pages/targets.js';
 import { PAGES } from './pages/index.js';
 
 const VERSION = typeof __VERSION__ === 'string' ? __VERSION__ : 'dev';
 
+/** Raw recorder history rarely reaches further back than this. */
+const MAX_DAY_BACK = 13;
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function dayLabel(offset) {
+  const d = new Date();
+  d.setDate(d.getDate() - offset);
+  const rel = offset === 0 ? 'today' : offset === 1 ? 'yesterday' : `${offset} days ago`;
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${rel}`;
+}
+
 /**
- * <health-hub-card> — a ten-page analytical health console.
+ * <health-hub-card> — a twelve-page analytical health console.
  *
  * Design source: Claude Design project "Health Hub Light".
  * Data source: live Home Assistant state plus the recorder read APIs.
@@ -17,7 +30,7 @@ const VERSION = typeof __VERSION__ === 'string' ? __VERSION__ : 'dev';
  * The card never mutates the recorder. Every number on screen is read from
  * `hass.states` or from `history/history_during_period` /
  * `recorder/statistics_during_period`. The only writes are ordinary service
- * calls behind the explicit device controls on the Now and Night pages.
+ * calls behind the explicit device controls on the Now, Day and Night pages.
  */
 class HealthHubCard extends HTMLElement {
   constructor() {
@@ -33,6 +46,9 @@ class HealthHubCard extends HTMLElement {
       openCard: null,
       openList: null,
       room: 'bed',
+      dayOffset: 0,
+      targets: loadTargets(),
+      ...defaultRange(),
       lag: 0,
       cell: [0, 3],
       corrWindow: 45,
@@ -105,8 +121,9 @@ class HealthHubCard extends HTMLElement {
       this._loadedFor = null;
       this._load();
     }
-    if (cardOpened) this._loadCardSeries();
-    if (patch.room !== undefined && !pageChanged) {
+    const rangeChanged = ('cardFrom' in patch || 'cardTo' in patch) && this.state.openCard;
+    if (cardOpened || rangeChanged) this._loadCardSeries();
+    if ((patch.room !== undefined || patch.dayOffset !== undefined) && !pageChanged) {
       this._loadedFor = null;
       this._load();
     }
@@ -234,12 +251,28 @@ class HealthHubCard extends HTMLElement {
 
   _header(ctx, page) {
     const live = page.live ? page.live(ctx) : { color: P.good, label: 'ok' };
+    const off = this.state.dayOffset;
     return h('header.hh-head', [
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: '3px' } }, [
         h('h1', page.title),
         h('span.q', page.question),
       ]),
       h('div.hh-pills', [
+        // A day-scoped page needs to say which day it is showing, and let you
+        // walk back through the recorder one day at a time.
+        page.dayScoped ? h('span.hh-daynav', [
+          h('button', {
+            type: 'button', title: 'previous day',
+            disabled: off >= MAX_DAY_BACK ? '' : null,
+            onClick: () => this.setState({ dayOffset: Math.min(MAX_DAY_BACK, off + 1) }),
+          }, '‹'),
+          h('span.lbl', dayLabel(off)),
+          h('button', {
+            type: 'button', title: 'next day',
+            disabled: off <= 0 ? '' : null,
+            onClick: () => this.setState({ dayOffset: Math.max(0, off - 1) }),
+          }, '›'),
+        ]) : null,
         h('span.hh-pill', { style: { whiteSpace: 'nowrap' } }, `scale: ${page.scale}`),
         h('span.hh-pill', { style: { color: live.color } }, [
           h('i.hh-dot', { style: { background: live.color } }),

@@ -1,7 +1,7 @@
 import { h } from '../core/dom.js';
 import { P } from '../core/tokens.js';
 import { entityCard, panel, banner, emptyState, legendRow } from '../core/ui.js';
-import { lineChart, laneChart } from '../charts/svg.js';
+import { lineChart, laneChart, spark } from '../charts/svg.js';
 import { dayKey, resample } from '../core/ha.js';
 import { loadEvents, eventsFor } from '../core/events.js';
 import { fmt, age, clockOf, NO_DATA } from '../core/format.js';
@@ -74,12 +74,14 @@ export default {
     // ----------------------------------------------------------------- cards
     const cards = [];
     const iqos = data.val(E.iqosToday);
+    const iqosTrend = grid(pd.iqosStats[E.iqosToday] || pd.iqosStats[E.iqosPuffs] || [], pd.days, 'max');
     cards.push(entityCard(ctx, {
       span: 2, size: '40px', label: 'IQOS per day', entity: E.iqosToday, dec: 0, unit: 'sticks',
       srcState: ctx.sourceState('iqos').state,
       ranges: { refMin: 0, refMax: 46, optMin: 0, optMax: 0 },
       delta: `${fmt(data.val(E.iqosPuffs), 0)} puffs · target 0\nlast sync ${data.raw(E.iqosSync) || NO_DATA}`,
       deltaColor: iqos > 20 ? P.alert : P.warn,
+      spark: spark(iqosTrend, P.alert),
       source: 'IQOS · manual sync ±15%',
       note: 'timestamps borderline for E29',
     }));
@@ -222,7 +224,7 @@ export default {
     ));
 
     // ------------------------------------------------------- substitution
-    const iqosDaily = grid(pd.iqosStats[E.iqosToday] || pd.iqosStats[E.iqosPuffs] || [], pd.days, 'max');
+    const iqosDaily = iqosTrend;
     const padDaily = grid(pd.padStats[E.padTimeDay] || [], pd.days, 'max');
     const hasBoth = iqosDaily.filter(Number.isFinite).length >= 3 && padDaily.filter(Number.isFinite).length >= 3;
     out.push(panel(

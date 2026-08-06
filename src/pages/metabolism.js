@@ -1,7 +1,7 @@
 import { h } from '../core/dom.js';
 import { P } from '../core/tokens.js';
-import { entityCard, panel, banner, emptyState, legendRow } from '../core/ui.js';
-import { lineChart, heatmap, scatterChart, spark } from '../charts/svg.js';
+import { entityCard, panel, banner, emptyState, legendRow, cardHeading } from '../core/ui.js';
+import { lineChart, calendarChart, scatterChart, spark } from '../charts/svg.js';
 import { dayKey, resample } from '../core/ha.js';
 import { loadEvents } from '../core/events.js';
 import { fmt, age, percentile, mean, sd, linreg, NO_DATA } from '../core/format.js';
@@ -32,6 +32,7 @@ export default {
   title: 'Metabolism',
   question: 'What is my glucose doing, and driven by what?',
   scale: 'min · 14 d',
+  dayScoped: true,
 
   live(ctx) {
     const cgm = ctx.sourceState('nightscout');
@@ -54,7 +55,7 @@ export default {
       ? (await data.history(E.fwLastMeal, 7 * 24, { significantOnly: false }))[E.fwLastMeal] || []
       : [];
 
-    const analysis = analyse(hist);
+    const analysis = analyse(hist, ctx.state.dayOffset);
     const mealTimes = evts.events
       .filter((e) => e.kind === 'meal')
       .map((e) => ({ t: e.t, ...describeMeal(e.t, mealHistory) }));
@@ -94,6 +95,7 @@ export default {
     const worst = pd.dishes[0] || null;
     const best = pd.dishes.length > 1 ? pd.dishes[pd.dishes.length - 1] : null;
 
+    cards.push(cardHeading('Spikes', `across the ${cover} days the CGM actually covered`));
     cards.push(entityCard(ctx, {
       span: 2, size: '40px', label: 'Spikes above 7.8',
       value: sp ? sp.perDay : null,
@@ -143,6 +145,7 @@ export default {
       emptyHint: 'no aligned meal window yet',
     }));
 
+    cards.push(cardHeading('Dishes', 'ranked by average peak rise, with the repeat count on each'));
     cards.push(entityCard(ctx, {
       label: 'Worst dish',
       value: worst ? worst.rise : null,
@@ -189,6 +192,8 @@ export default {
     }));
 
     // ------------------------------------------------------------- nutrition
+    cards.push(cardHeading('Food eaten today',
+      'actual intake from Foodwatch against the Foodie plan'));
     const t = pd.today;
     const nutritionState = t.stale ? 'stale' : ctx.sourceState('foodwatch').state;
     const plan = planMacros(data);
@@ -247,6 +252,8 @@ export default {
 
     // ------------------------------------------------------------ lab context
     const orn = ctx.sourceState('ornament');
+    cards.push(cardHeading('Laboratory context',
+      `drawn ${ornDate(data, 'sensor.ornament_nazariy_homa_ir')}, so read it as a slow endpoint`));
     cards.push(entityCard(ctx, {
       span: 2, size: '32px', label: 'HOMA-IR', entity: 'sensor.ornament_nazariy_homa_ir', dec: 2,
       srcState: orn.state,
@@ -278,11 +285,15 @@ export default {
     // ------------------------------------------------- spike detection chart
     const lastDay = pd.lastFullDay;
     out.push(panel(
-      'Spike detection on the last full day',
+      lastDay ? `Spike detection on ${lastDay.label}` : 'Spike detection',
       lastDay
         ? `Every stretch above ${SPIKE} mmol/L is shaded and each meal before one is marked. `
           + `${lastDay.label} carries ${lastDay.spikes} spike${lastDay.spikes === 1 ? '' : 's'} `
-          + `and a peak of ${fmt(lastDay.peak, 1)} mmol/L. Short sampling gaps are bridged; a real outage stays a break.`
+          + `and a peak of ${fmt(lastDay.peak, 1)} mmol/L. `
+          + (lastDay.requested
+            ? 'Short sampling gaps are bridged; a real outage stays a break.'
+            : 'The day picked in the header has too little coverage to judge, so this is the most '
+              + 'recent day that does.')
         : 'No day in the window has enough coverage to detect spikes.',
       lastDay ? `peak ${fmt(lastDay.peak, 1)} mmol/L` : '',
       lastDay
@@ -389,14 +400,12 @@ export default {
       + 'a spike and how high it went. An empty cell is a day without CGM data.',
       `${cal.filled} days with data · ${cal.spikeDays} with a spike`,
       cal.filled
-        ? heatmap({
-          cols: Math.ceil(CV_DAYS / 7), rows: 7,
-          labels: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'],
-          xLabels: [
-            { at: 0, t: `−${Math.ceil(CV_DAYS / 7)} weeks` },
-            { at: Math.ceil(CV_DAYS / 7) - 1, t: 'now' },
-          ],
-          cells: cal.cells,
+        ? calendarChart({
+          values: cal.values, end: new Date(),
+          scale: SPIKE_SCALE,
+          legendLow: 'inside target', legendHigh: '3+ over',
+          color: (v) => SPIKE_SCALE[bucketOver(v)],
+          label: (v) => `peak ${fmt(v, 1)} mmol/L${v > SPIKE ? ', spike' : ''}`,
         })
         : emptyState('The long-term glucose statistics have not accumulated yet.'),
     ));
@@ -444,7 +453,7 @@ export default {
 
 // ------------------------------------------------------------------ analysis
 
-function analyse(hist) {
+function analyse(hist, dayOffset) {
   const empty = {
     agp: null, todaySlots: new Array(SLOTS).fill(null), days: new Set(),
     spikes: null, maxRise: null, maxRiseMeal: null, meanTimeToPeak: null, meanReturn: null,
@@ -507,13 +516,19 @@ function analyse(hist) {
     }
     : null;
 
-  return { ...empty, agp, todaySlots, days, spikes, lastFullDay: pickLastFullDay(byDay) };
+  return { ...empty, agp, todaySlots, days, spikes, lastFullDay: pickDay(byDay, dayOffset) };
 }
 
-/** The most recent day with enough coverage to draw and count spikes on. */
-function pickLastFullDay(byDay) {
+/**
+ * The day the header navigator points at. If that day has too little coverage
+ * to judge, fall back to the most recent day that does — and the chart title
+ * names whichever day it ended up drawing, so the two never disagree.
+ */
+function pickDay(byDay, dayOffset) {
+  const wanted = dayKey(Date.now() - (dayOffset || 0) * 86400e3);
   const keys = [...byDay.keys()].sort().reverse();
-  for (const k of keys) {
+  const ordered = byDay.has(wanted) ? [wanted, ...keys.filter((k) => k !== wanted)] : keys;
+  for (const k of ordered) {
     const rows = byDay.get(k).slice().sort((a, b) => a.t - b.t);
     if (rows.length < 60) continue;
     const start = new Date(rows[0].t); start.setHours(0, 0, 0, 0);
@@ -525,6 +540,7 @@ function pickLastFullDay(byDay) {
     }
     return {
       key: k, label: k, slots, spikes,
+      requested: k === wanted,
       peak: Math.max(...rows.map((p) => p.v)),
       mealMarks: [],
     };
@@ -705,37 +721,35 @@ function carbScatter(ctx, meals) {
   ]);
 }
 
-/** Whether each day's peak crossed the threshold, from long-term statistics. */
+const SPIKE_SCALE = ['#EAF2EC', '#CFE4D6', '#E8CE96', '#DFA45C', '#BE3A2B'];
+
+/** How far a day's peak went past the target, bucketed for the calendar. */
+function bucketOver(peak) {
+  const over = peak - SPIKE;
+  if (over <= -1) return 0;
+  if (over <= 0) return 1;
+  if (over <= 1) return 2;
+  if (over <= 3) return 3;
+  return 4;
+}
+
+/** One value per day: the day's peak glucose, or null where the CGM was silent. */
 function spikeCalendar(rows) {
   const byDay = new Map();
   for (const r of rows) {
-    if (!Number.isFinite(r.max)) continue;
-    byDay.set(dayKey(r.t), { max: r.max, mean: r.mean });
+    if (Number.isFinite(r.max)) byDay.set(dayKey(r.t), r.max);
   }
-  const cols = Math.ceil(CV_DAYS / 7);
-  const cells = [];
+  const values = [];
   let filled = 0, spikeDays = 0;
   for (let i = 0; i < CV_DAYS; i++) {
     const t = Date.now() - (CV_DAYS - 1 - i) * 86400e3;
-    const k = dayKey(t);
-    const dow = (new Date(t).getDay() + 6) % 7;
-    const col = Math.min(Math.floor(i / 7), cols - 1);
-    const rec = byDay.get(k);
-    if (!rec) {
-      cells.push({ x: col, y: dow, color: null, title: `${k} · no CGM data` });
-      continue;
-    }
+    const v = byDay.get(dayKey(t));
+    if (v === undefined) { values.push(null); continue; }
     filled++;
-    const over = rec.max - SPIKE;
-    if (over > 0) spikeDays++;
-    cells.push({
-      x: col, y: dow,
-      color: over <= 0 ? P.good : over > 3 ? P.alert : over > 1.5 ? P.warn : '#C79A3A',
-      op: over <= 0 ? 0.45 : 0.3 + Math.min(1, over / 4) * 0.65,
-      title: `${k} · peak ${fmt(rec.max, 1)} mmol/L${over > 0 ? ' — spike' : ''}`,
-    });
+    if (v > SPIKE) spikeDays++;
+    values.push(v);
   }
-  return { cells, filled, spikeDays };
+  return { values, filled, spikeDays };
 }
 
 // ---------------------------------------------------------------- nutrition

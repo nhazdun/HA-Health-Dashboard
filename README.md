@@ -1,106 +1,122 @@
 # Health Hub
 
-Десятисторінкова аналітична консоль здоров’я для Home Assistant.
+A twelve-page analytical health console for Home Assistant.
 
-Дизайн — проєкт Claude Design **«Health Hub Light»**. Дані — живий стан Home Assistant
-і читання з recorder’а.
+The design comes from the Claude Design project **“Health Hub Light”**. The data is live Home
+Assistant state plus reads from the recorder.
 
-**Історичні дані карта не змінює ніколи.** Єдині записи — це явні керування на сторінках
-«Зараз» і «Ніч»: запуск доріжки, швидкість, калібрування датчика постави, якір сну. Кожне з них —
-звичайний виклик сервісу HA на сутність, яку ви натиснули; жодних змін у базі recorder’а.
+**The card never changes historical data.** The only writes are the explicit controls on the Now,
+Day and Night pages — starting the treadmill, setting its speed, calibrating the posture sensor,
+anchoring a sleep session. Each one is an ordinary Home Assistant service call on an entity you
+pressed. Nothing touches the recorder database.
 
-![сторінок](https://img.shields.io/badge/сторінок-10-B45309)
-![історія](https://img.shields.io/badge/історія-не%20змінюється-2E7D5B)
-
----
-
-## Що це
-
-Звичайний health-застосунок показує гарну цифру й мовчить про те, звідки вона. Ця консоль побудована
-навколо трьох тез, і кожна з них видима в інтерфейсі, а не захована в коді.
-
-**1. Довіра до сигналу — first-class громадянин.**
-Кожна метрика несе свій вік і стан. Свіже — повна насиченість і зелена крапка. Застаріле — приглушене,
-жовта крапка, вік поруч. Мертве — сіре, значення закреслене, причина текстом. Недовірене число візуально
-приглушене й **не бере участі в агрегатах**.
-
-Вердикти обчислюються з `last_reported` проти задекларованого кроку джерела, а не записані наперед —
-тому канал, який полагодили, сам стає зеленим.
-
-**2. Подвійні джерела і їхня згода.**
-Oura проти Muse на ту саму ніч. Три PM2.5-сенсори в одній квартирі. Три лічильники кроків. Це не
-надлишковість, а вбудована валідація: **дельта між джерелами показується як окрема метрика**, а не
-ховається за усередненням.
-
-**3. Подвійний діапазон: референс проти оптимуму.**
-Лабораторний референс і оптимальний коридор малюються на одній смузі. Маркерів поза оптимумом
-у рази більше, ніж поза референсом, і саме ця різниця — головна аналітична цінність.
-
-**Клік на будь-яку картку** відкриває, звідки взялося число: реальний ряд із recorder’а за вікном,
-що відповідає кроку джерела, подвійний діапазон із легендою і чотири факти — вік, стан довіри,
-джерело, застереження. Метрика без власної сутності так і каже, що ряду немає, замість намалювати
-правдоподібну лінію.
-
-**Сторінка «Середовище» перемикається по кімнатах.** Спальня має два незалежні прилади (Qingping
-і Dyson), тож пік PM2.5 там можна підтвердити, і тільки там існують NO₂ та формальдегід. У вітальні
-один вузол — отже жодної крос-валідації, і сторінка це проговорює, а не приховує.
+![pages](https://img.shields.io/badge/pages-12-B45309)
+![history](https://img.shields.io/badge/history-never%20modified-2E7D5B)
 
 ---
 
-## Десять сторінок
+## What this is
 
-| # | Сторінка | Питання | Масштаб |
+An ordinary health app shows a pretty number and says nothing about where it came from. This console
+is built around three claims, and each one is visible in the interface rather than buried in the code.
+
+**1. Trust in a signal is a first-class citizen.**
+Every metric carries its age and its state. Fresh means full saturation and a green dot. Stale means
+dimmed, an amber dot and the age beside it. Dead means grey, the value struck through and the reason
+in words. A value with low trust is visually demoted and **kept out of every total**.
+
+Verdicts are computed from `last_reported` against each source’s declared cadence, never written in
+advance — which is the only way a channel you repaired can go green again on its own.
+
+**2. Two sources and whether they agree.**
+Oura against Muse on the same night. Three PM2.5 sensors in one flat. Three step counters. This is
+not redundancy but built-in validation: **the difference between sources is shown as a metric of its
+own**, never hidden behind an average.
+
+**3. Two ranges: reference against optimum.**
+The laboratory reference and the optimal range are drawn on the same bar. Far more markers fall
+outside the optimum than outside the reference, and that gap is the analytical value.
+
+**Click any card** to see where its number came from: the real recorder series over a window you
+choose (24 h to 12 months, or your own dates), the dual range with a legend, and four facts — age,
+trust state, source and caveat. A metric with no entity says so instead of drawing a plausible line.
+
+**The Environment page switches by room.** The bedroom has two independent devices (Qingping and
+Dyson), so a PM2.5 peak there can be *confirmed*, and only there do NO₂ and formaldehyde exist at
+all. The living room has one node, so there is no cross-check — and the page says that rather than
+hiding it.
+
+---
+
+## The twelve pages
+
+| # | Page | Question | Scale |
 |---|---|---|---|
-| 01 | Зараз | Що з моїм тілом у цю хвилину? | с · хв |
-| 02 | Ніч | Як я спав і чому саме так? | одна ніч |
-| 03 | Метаболізм | Що робить моя глюкоза і від чого? | хв · 14 д |
-| 04 | Тіло | Чи йде рекомпозиція? | тижні |
-| 05 | Серце й судини | Як тримаються судини? | удар · доба |
-| 06 | Лабораторія | Що в крові й куди воно рухається? | квартали |
-| 07 | Середовище | Чим я дихаю і в якому світлі живу? | 5 хв · доба |
-| 08 | Поведінка | Що я насправді роблю щодня? | доба |
-| 09 | Кореляції | Що на що впливає? | доби · лаг |
-| 10 | Довіра до даних | Чи можна вірити тому, що я щойно бачив? | аудит |
+| 01 | Now | What is my body doing this minute? | s · min |
+| 02 | Day | What do I do across the day, hour by hour? | hours |
+| 03 | Night | How did I sleep, and why exactly that way? | one night |
+| 04 | Metabolism | What is my glucose doing, and driven by what? | min · 14 d |
+| 05 | Body | Is recomposition actually happening? | weeks |
+| 06 | Heart & vessels | How are the vessels holding up? | beat · day |
+| 07 | Labs | What is in the blood, and where is it heading? | quarters |
+| 08 | Environment | What am I breathing, and in what light do I live? | 5 min · day |
+| 09 | Behaviour | What do I actually do every day? | day |
+| 10 | Correlations | What affects what? | days · lag |
+| 11 | Data trust | Can I believe what I just looked at? | audit |
+| 12 | Targets | What am I aiming for each day? | per day |
 
 ---
 
-## Що саме рахується з реальних даних
+## What is actually computed from real data
 
-- **AGP і TIR** — перцентильні смуги 5/25/50/75/95 будуються з фактичного ряду `sensor.glucose`
-  за 14 днів, згрупованого по 15-хвилинних слотах доби. Час у діапазоні — з тих самих точок.
-- **Постпрандіальні криві** — вікна 0–3 год вирізаються з ряду глюкози за таймстемпами Foodwatch;
-  AUC рахується над базовою лінією. Точки, де поруч була сесія на доріжці, позначені холодним кольором.
-- **163 біомаркери** — читаються прямо з атрибутів сенсорів Ornament: `reference_min/max`,
-  `optimal_min/max`, `category`, `measured_at`, `history`. Лонгітудинальний графік у шухляді — це
-  справжній масив `history` з HA.
-- **Матриця кореляцій** — Pearson по денних агрегатах із довгострокової статистики. Клітинки з
-  n < 20 лишаються **порожніми**, а не сірими. Повзунок лагу −3…+3 доби зсуває Y проти X.
-- **Bland–Altman** — Oura проти Muse за часом неспання по спільних ночах, зі зміщенням і смугами ±1.96 SD.
-- **Прогрес експериментів** — n рахується як кількість діб, де в recorder’і є обидві змінні гіпотези.
-- **Живість і покриття** — з `last_reported` та довгострокової статистики, дірки лишаються дірками.
+- **Spike detection.** Every excursion above 7.8 mmol/L is found in the real `sensor.glucose`
+  series and attributed to the meal before it. Dishes are ranked by average peak rise, never by
+  calories. A dish eaten once is listed with `n=1` rather than presented as a settled property.
+- **AGP and time in range.** The 5/25/50/75/95 percentile bands are built from the actual series
+  over 14 days, grouped into 15-minute slots of the day.
+- **Postprandial windows.** A 0–3 h window is cut out of the glucose series at each Foodwatch
+  timestamp; the rise is measured against the pre-meal baseline, and a treadmill session inside
+  30 minutes marks the meal as walked.
+- **163 biomarkers** read straight from the Ornament sensor attributes: `reference_min/max`,
+  `optimal_min/max`, `category`, `measured_at` and `history`. The longitudinal chart in the drawer
+  is that real `history` array.
+- **The correlation matrix** is Pearson over daily aggregates from the long-term statistics. A cell
+  with n < 20 stays **empty** rather than grey. The lag slider shifts Y against X by whole days.
+- **Bland–Altman** compares Oura against Muse on awake time across their shared nights, with the
+  bias and ±1.96 SD bands.
+- **Experiment progress**: n is the number of days where the recorder holds both variables of the
+  hypothesis at once.
+- **Liveness and coverage** come from `last_reported` and the long-term statistics.
 
-Порожньо ніколи не показується як `0`. Порожньо — це «немає даних, ось чому».
+Today’s food intake is summed from the meals the recorder holds **for today**, not from the
+Foodwatch running totals, which are counters that never reset.
+
+Empty is never rendered as `0`. Empty says “no data”, and why.
+
+Chart gaps: a hole shorter than the chart’s bridge threshold is sampling jitter and is interpolated;
+a longer hole is a real outage and stays a visible break, so a dead channel still reads as dead.
 
 ---
 
-## Встановлення
+## Install
 
-### HACS (рекомендовано)
+### HACS (recommended)
 
 1. HACS → **Frontend** → ⋮ → **Custom repositories**
-2. Репозиторій: `https://github.com/nhazdun/HA-Health-Dashboard`, категорія **Lovelace/Dashboard**
-3. Знайти **Health Hub** → Download
-4. Ресурс `/hacsfiles/HA-Health-Dashboard/health-hub-card.js` (тип **JavaScript Module**) додається автоматично
+2. Repository `https://github.com/nhazdun/HA-Health-Dashboard`, category **Lovelace/Dashboard**
+3. Find **Health Hub** → Download
+4. The resource `/hacsfiles/HA-Health-Dashboard/health-hub-card.js` (type **JavaScript Module**) is
+   added for you
 
-### Вручну
+### Manually
 
-Скопіювати `dist/health-hub-card.js` у `/config/www/`, далі
-**Налаштування → Дашборди → Ресурси → Додати ресурс**:
-URL `/local/health-hub-card.js`, тип **JavaScript Module**.
+Copy `dist/health-hub-card.js` into `/config/www/`, then
+**Settings → Dashboards → Resources → Add resource**:
+URL `/local/health-hub-card.js`, type **JavaScript Module**.
 
-### Дашборд
+### The dashboard
 
-Створити дашборд, у режимі редагування — **Raw configuration editor**:
+Create a dashboard, open **Raw configuration editor** in edit mode:
 
 ```yaml
 views:
@@ -110,22 +126,22 @@ views:
       - type: custom:health-hub-card
 ```
 
-`type: panel` обовʼязковий — карта рендерить власну навігацію на всю ширину.
+`type: panel` is required — the card renders its own full-width navigation.
 
 ---
 
-## Опції карти
+## Card options
 
 ```yaml
 type: custom:health-hub-card
-page: now        # яку сторінку відкривати першою: now, night, metab, body,
-                 # heart, labs, env, behav, corr, trust
-accent: '#B45309' # тепла вісь власних даних
+page: now         # which page opens first: now, work, night, metab, body,
+                  # heart, labs, env, behav, corr, trust, targets
+accent: '#B45309' # the warm axis used for your own measurements
 ```
 
 ---
 
-## Розробка
+## Development
 
 ```bash
 npm install
@@ -133,40 +149,42 @@ npm run build     # dist/health-hub-card.js
 npm run watch
 ```
 
-Офлайн-стенд із синтетичним, але правильно сформованим станом — `scripts/harness.html`.
-`npm run build` вплітає щойно зібраний бандл прямо в `scripts/harness.built.html` — **відкривати
-треба саме його**. Без цього браузер підсовував стару копію `dist/` і одного разу сховав два цілі
-блоки, яких насправді не бракувало.
+`npm run build` also writes `scripts/harness.built.html` with the fresh bundle spliced in — **open
+that file, not `harness.html`**. Loading `dist/` as a sub-resource once let a stale cached copy hide
+two whole panels that were present in the build.
 
-Стенд проходить усі десять сторінок і ловить помилки рендера до встановлення в HA:
+The harness walks all twelve pages against synthetic-but-correctly-shaped state and catches render
+errors before the card is ever installed:
 
 ```js
 await window.__sweep()   // => { errors: 0, detail: [] }
-await window.__calls()   // виклики сервісів, які зробили б керування
+window.__calls()         // the service calls the controls would have made
 ```
 
-### Структура
+### Layout
 
 ```
 src/
-  core/      tokens · dom · format · ha · registry · events · ui
-  charts/    svg — line, scatter, heatmap, lanes, stacks, matrix
-  pages/     10 сторінок, по одному питанню на кожну
+  core/      tokens · dom · format · ha · registry · events · info · ui
+             controls · card-detail · list-modal · targets
+  charts/    svg — line, scatter, calendar, lanes, stacks, matrix
+  pages/     twelve pages, one question each
 ```
 
-`src/core/registry.js` — єдине місце, де живуть entity_id і очікувані кроки джерел.
-Щоб додати прилад, достатньо дописати джерело туди.
+`src/core/registry.js` is the single place entity ids and expected cadences live. To add a device,
+add a source there.
 
 ---
 
-## Обмеження
+## Limits
 
-- Сира історія в recorder’і зазвичай зберігається ~10 діб; усе, що глибше, читається з довгострокової
-  статистики й доступне лише для сутностей зі `state_class`. Шум, TVOC і PM10 його не мають.
-- Гіпнограма по епохах недоступна: Oura й Muse віддають агреговані тривалості стадій, тому сторінка
-  «Ніч» порівнює стадії, а не малює поепохову доріжку.
-- Нічний профіль АТ і melanopic EDI не мають джерела — каркас на місці, дані зʼявляться разом із приладами.
+- Raw recorder history is usually kept for about 10 days; anything deeper is read from the long-term
+  statistics and is only available for entities with a `state_class`. Noise, TVOC and PM10 have none.
+- Per-epoch hypnograms are not available: Oura and Muse both return aggregated stage durations, so
+  the Night page compares stages instead of drawing an epoch track.
+- Nocturnal blood pressure and melanopic EDI have no source yet. The frames are in place and the
+  data appears when the devices do.
 
-## Ліцензія
+## Licence
 
 MIT

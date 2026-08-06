@@ -136,6 +136,47 @@ export const CSS = `
 .hh-bar .opt{top:4px;height:7px;background:${P.bandOpt};border-radius:2px}
 .hh-bar .mark{top:0;width:2px;height:15px;border-radius:1px;box-shadow:0 0 0 2px ${P.surf}}
 
+.hh-cardhead{grid-column:1/-1;display:flex;align-items:baseline;gap:12px;padding:6px 0 0}
+.hh-cardhead .t{font-size:12.5px;font-weight:600;letter-spacing:-.01em}
+.hh-cardhead .s{font-size:11.5px;color:${P.mut}}
+.hh-cardhead .rule{flex:1;height:1px;border-top:1px dashed ${P.rule}}
+
+/* ---------- day navigator ---------- */
+.hh-daynav{display:flex;align-items:center;gap:6px;margin-right:4px}
+.hh-daynav button{background:${P.surf};border:1px solid ${P.rule};border-radius:8px;width:28px;height:28px;
+  cursor:pointer;color:${P.ink2};font-size:13px;line-height:1}
+.hh-daynav button:hover:not(:disabled){border-color:${P.off}}
+.hh-daynav button:disabled{opacity:.4;cursor:not-allowed}
+.hh-daynav .lbl{font-size:11.5px;color:${P.ink};min-width:132px;text-align:center}
+
+/* ---------- range picker ---------- */
+.hh-range{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.hh-range .presets{display:flex;align-items:center;gap:2px;background:${P.bg};border:1px solid ${P.rule};
+  border-radius:9px;padding:3px}
+.hh-range .presets button{background:transparent;border:none;border-radius:7px;padding:6px 11px;cursor:pointer;
+  font-family:${MONO};font-size:11px;color:${P.mut}}
+.hh-range .presets button:hover{background:${P.s2}}
+.hh-range .presets button[aria-pressed="true"]{background:${P.surf};color:${P.ink};font-weight:600}
+.hh-range .dates{display:flex;align-items:center;gap:8px}
+.hh-range input[type=date]{background:${P.surf};border:1px solid ${P.rule};border-radius:8px;padding:6px 9px;
+  font-family:${MONO};font-size:11px;color:${P.ink}}
+.hh-range .to{font-size:11px;color:${P.off}}
+
+/* ---------- targets ---------- */
+.hh-tsum{display:flex;align-items:center;gap:22px;flex-wrap:wrap;background:${P.surf};
+  border:1px solid ${P.rule};border-radius:14px;padding:16px 20px;box-shadow:0 1px 3px rgba(120,60,50,.06)}
+.hh-tsum .big{font-family:${MONO};font-size:30px;font-weight:500;letter-spacing:-.03em}
+.hh-tsum .mid{flex:1;min-width:200px;display:flex;flex-direction:column;gap:7px}
+.hh-tsum .note{font-size:11.5px;color:${P.mut};line-height:1.5}
+.hh-tbar{height:8px;background:${P.s2};border-radius:4px;overflow:hidden}
+.hh-tbar i{display:block;height:8px;border-radius:4px}
+.hh-trow{display:grid;grid-template-columns:minmax(130px,1.4fr) 84px 132px minmax(60px,1fr) 74px;gap:12px;
+  align-items:center;padding:11px 16px;border-bottom:1px solid ${P.s3}}
+.hh-trow .lbl{display:flex;align-items:center;gap:7px;font-size:12.5px;color:${P.ink}}
+.hh-trow .cur{font-family:${MONO};font-size:13px;text-align:right}
+.hh-trow .cur em{font-style:normal;font-size:9.5px;color:${P.off};margin-left:4px}
+.hh-trow .st{font-family:${MONO};font-size:11px;text-align:right}
+
 .hh-card.is-clickable{cursor:pointer;transition:border-color .15s}
 .hh-card.is-clickable:hover{border-color:${P.off}}
 .hh-card.is-clickable:focus-visible{outline:2px solid ${P.self};outline-offset:2px}
@@ -273,7 +314,7 @@ svg{display:block;width:100%;overflow:visible}
 .hh-warn .a{font-family:${MONO};font-size:10px}
 
 /* ---------- correlations ---------- */
-.hh-corr{display:grid;grid-template-columns:minmax(280px,1fr) minmax(280px,1fr);gap:20px;align-items:start}
+.hh-corr{display:grid;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));gap:22px;align-items:start}
 .hh-lag{display:flex;align-items:center;gap:14px}
 .hh-lag input[type=range]{width:220px;accent-color:var(--hh-accent)}
 .hh-lag .v{font-family:${MONO};font-size:14px;width:54px;text-align:right}

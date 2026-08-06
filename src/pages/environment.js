@@ -1,7 +1,7 @@
 import { h } from '../core/dom.js';
 import { P } from '../core/tokens.js';
 import { entityCard, panel, banner, emptyState, legendRow } from '../core/ui.js';
-import { lineChart, heatmap } from '../charts/svg.js';
+import { lineChart, calendarChart } from '../charts/svg.js';
 import { resample, dayKey } from '../core/ha.js';
 import { loadEvents, eventsFor } from '../core/events.js';
 import { fmt, mean, NO_DATA } from '../core/format.js';
@@ -222,21 +222,20 @@ export default {
     }
 
     // ------------------------------------------------------------- calendar
-    const cal = calendar(pd.cal, bed);
+    const cal = calendar(pd.cal);
     out.push(panel(
       `${bed ? 'Bedroom' : 'Desk'} PM2.5 calendar over ${CAL_DAYS} days`,
-      'A darker cell is a worse day. A single dark cell is an indoor event and a full dark column matches '
-      + 'the outdoor AQI. The scale is the same for both rooms, so you can compare them with the switcher.',
+      'One cell is one day, coloured by the daily mean. Point at a cell to read its date and value. '
+      + 'A single dark cell is an indoor event and a full dark column matches the outdoor AQI. The '
+      + 'scale is the same for both rooms, so you can compare them with the switcher.',
       `${cal.filled} days with data`,
       cal.filled
-        ? heatmap({
-          cols: Math.ceil(CAL_DAYS / 7), rows: 7,
-          labels: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'],
-          xLabels: [
-            { at: 0, t: `−${Math.ceil(CAL_DAYS / 7)} weeks` },
-            { at: Math.ceil(CAL_DAYS / 7) - 1, t: 'now' },
-          ],
-          cells: cal.cells,
+        ? calendarChart({
+          values: cal.values, end: new Date(),
+          scale: PM_SCALE,
+          legendLow: '5 µg/m³', legendHigh: '22 or more',
+          color: (v) => PM_SCALE[pmBucket(v)],
+          label: (v) => `${fmt(v, 1)} µg/m³ mean`,
         })
         : emptyState('The long-term PM2.5 statistics for this room have not accumulated yet.'),
     ));
@@ -439,34 +438,26 @@ function comparePm(data) {
   return `${fmt(bed - desk, 0)} below the bedroom`;
 }
 
-function calendar(rows, bed) {
+const PM_SCALE = ['#EAF2EC', '#CFE4D6', '#E8CE96', '#DFA45C', '#BE3A2B'];
+const pmBucket = (v) => (v > 21 ? 4 : v > 17 ? 3 : v > 13 ? 2 : v > 10 ? 1 : 0);
+
+/** One value per day: the daily mean PM2.5, or null where the node was silent. */
+function calendar(rows) {
   const byDay = new Map();
   for (const r of rows) {
     const v = r.mean ?? r.max;
     if (Number.isFinite(v)) byDay.set(dayKey(r.t), v);
   }
-  const cols = Math.ceil(CAL_DAYS / 7);
-  const cells = [];
+  const values = [];
   let filled = 0;
   for (let i = 0; i < CAL_DAYS; i++) {
     const t = Date.now() - (CAL_DAYS - 1 - i) * 86400e3;
-    const k = dayKey(t);
-    const dow = (new Date(t).getDay() + 6) % 7;
-    const col = Math.min(Math.floor(i / 7), cols - 1);
-    const v = byDay.get(k);
-    if (v === undefined) {
-      cells.push({ x: col, y: dow, color: null, title: `${k} · no data` });
-    } else {
-      filled++;
-      cells.push({
-        x: col, y: dow,
-        color: v > 25 ? P.alert : v > 15 ? P.warn : v > 5 ? '#C79A3A' : P.good,
-        op: 0.25 + Math.min(1, v / 30) * 0.65,
-        title: `${k} · ${bed ? 'bedroom' : 'desk'} ${fmt(v, 1)} µg/m³`,
-      });
-    }
+    const v = byDay.get(dayKey(t));
+    if (v === undefined) { values.push(null); continue; }
+    filled++;
+    values.push(v);
   }
-  return { cells, filled };
+  return { values, filled };
 }
 
 export { mean };
