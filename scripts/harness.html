@@ -2,7 +2,7 @@
 <html lang="uk">
 <head>
 <meta charset="utf-8">
-<title>Health Hub — локальний стенд</title>
+<title>Health Hub — local test harness</title>
 <style>body{margin:0;font-family:system-ui}#err{position:fixed;bottom:0;left:0;right:0;background:#BE3A2B;
 color:#fff;font:12px monospace;padding:8px;max-height:30vh;overflow:auto;z-index:999;display:none;
 white-space:pre-wrap}</style>
@@ -238,7 +238,12 @@ function fakeHistory(msg) {
       else if (id.includes('temperature')) v = 23 + Math.sin(i / 10) * 1.5;
       else if (id.includes('noise')) v = 35 + (i % 9);
       else if (id.includes('heart_rate')) v = 60 + Math.sin(i / 5) * 15;
-      else if (id.startsWith('binary_sensor') || id.includes('walkingpad_state')) {
+      else if (id.includes('walkingpad_state')) {
+        // The real enum is stopped/active/paused/standby/starting/unknown — the
+        // harness has to speak it exactly, or the session detection is untested.
+        rows.push({ lu: t / 1000, s: i % 20 < 3 ? 'active' : 'standby' });
+        continue;
+      } else if (id.startsWith('binary_sensor')) {
         rows.push({ lu: t / 1000, s: i % 20 < 3 ? 'on' : 'off' });
         continue;
       } else if (id.includes('foodwatch_last_eaten')) {

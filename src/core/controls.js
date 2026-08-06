@@ -1,7 +1,7 @@
 import { h } from './dom.js';
 import { P } from './tokens.js';
 import { fmt } from './format.js';
-import { E } from './registry.js';
+import { E, padMoving } from './registry.js';
 
 /**
  * Device controls.
@@ -96,7 +96,7 @@ export function nowControls(ctx) {
   const out = [];
 
   if (data.exists(E.padBelt) || data.exists(E.padSpeedSet)) {
-    const running = data.raw(E.padBelt) === 'on' || data.raw(E.padState) === 'running';
+    const running = data.raw(E.padBelt) === 'on' || padMoving(data.raw(E.padState));
     const b = data.bounds(E.padSpeedSet, { min: 0.5, max: 6, step: 0.1, unit: 'km/h' });
     const setSpeed = data.val(E.padSpeedSet);
     const current = data.val(E.padSpeed);

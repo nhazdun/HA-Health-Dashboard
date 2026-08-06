@@ -439,3 +439,15 @@ export const ORNAMENT_META = new Set([
   'sensor.ornament_nazariy_abnormal_biomarkers',
   'sensor.ornament_nazariy_biomarkers_tracked',
 ]);
+
+/**
+ * The walking pad publishes its state machine as an enum whose options are
+ * `stopped / active / paused / standby / starting / unknown`. Every consumer
+ * has to agree on which of those mean "the belt is moving", so the test lives
+ * here rather than being spelled out at each call site.
+ */
+export const PAD_MOVING = new Set(['active', 'starting']);
+
+export function padMoving(state) {
+  return PAD_MOVING.has(String(state));
+}

@@ -1,5 +1,5 @@
 import { P } from './tokens.js';
-import { E } from './registry.js';
+import { E, padMoving } from './registry.js';
 
 /**
  * The shared annotation layer.
@@ -57,12 +57,12 @@ export async function loadEvents(ctx, hours) {
     prevPuff = r.v;
   }
 
-  // treadmill sessions — running → standby
+  // treadmill sessions — moving → standby
   const padRows = pad[E.padState] || [];
   let runStart = null;
   const sessions = [];
   for (const r of padRows) {
-    const running = r.s === 'running' || r.s === 'startup';
+    const running = padMoving(r.s);
     if (running && runStart === null) runStart = r.t;
     if (!running && runStart !== null) { sessions.push([runStart, r.t]); runStart = null; }
   }

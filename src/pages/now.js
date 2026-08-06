@@ -6,7 +6,7 @@ import { resample } from '../core/ha.js';
 import { loadEvents, eventsFor } from '../core/events.js';
 import { controlPanel, nowControls } from '../core/controls.js';
 import { fmt, age, hhmm, clockOf, NO_DATA } from '../core/format.js';
-import { E } from '../core/registry.js';
+import { E, padMoving } from '../core/registry.js';
 
 /** Page 1 — the realtime cockpit. Only channels that move faster than a minute. */
 
@@ -124,7 +124,7 @@ export default {
     }));
 
     const padTime = data.val(E.padTimeDay);
-    const padRunning = data.raw(E.padBelt) === 'on' || data.raw(E.padState) === 'running';
+    const padRunning = data.raw(E.padBelt) === 'on' || padMoving(data.raw(E.padState));
     cards.push(entityCard(ctx, {
       label: 'Treadmill today', entity: E.padTimeDay, dec: 2, unit: 'h',
       srcState: ctx.sourceState('kingsmith').state,

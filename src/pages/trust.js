@@ -4,7 +4,7 @@ import { panel, banner, emptyState, legendRow } from '../core/ui.js';
 import { laneChart, scatterChart } from '../charts/svg.js';
 import { dayKey } from '../core/ha.js';
 import { fmt, age, mean, sd, NO_DATA } from '../core/format.js';
-import { SOURCES, sourceState, sourceEntities, E } from '../core/registry.js';
+import { SOURCES, sourceState, sourceEntities, E, padMoving } from '../core/registry.js';
 
 /**
  * Page 10 — can I believe what I just looked at?
@@ -258,7 +258,7 @@ function buildWarnings(ctx) {
   }
 
   const polar = ctx.sourceState('polar');
-  const padRunning = data.raw(E.padState) === 'running';
+  const padRunning = padMoving(data.raw(E.padState));
   if (padRunning && data.raw(E.polarStreaming) === 'off' && data.raw(E.polarWorn) === 'on') {
     out.push({
       title: 'BLE conflict: H10 and the treadmill',

@@ -1,6 +1,6 @@
 {
   "name": "ha-health-dashboard",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Health Hub — a twelve-page analytical health console for Home Assistant, built on the Claude Design 'Health Hub Light' spec and driven entirely by live HA entity data.",
   "private": true,
   "type": "module",

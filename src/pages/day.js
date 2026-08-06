@@ -6,7 +6,7 @@ import { resample } from '../core/ha.js';
 import { loadEvents } from '../core/events.js';
 import { controlPanel, nowControls } from '../core/controls.js';
 import { fmt, mean, NO_DATA } from '../core/format.js';
-import { E } from '../core/registry.js';
+import { E, padMoving } from '../core/registry.js';
 
 /**
  * Page 2 — one day, hour by hour.
@@ -60,7 +60,7 @@ export default {
     const hr = hrPolar.length >= 3 ? hrPolar : hrOura;
     const meals = evts.events.filter((e) => e.kind === 'meal' && e.t >= win.start && e.t <= win.end);
     const iqos = evts.events.filter((e) => e.kind === 'iqos' && e.t >= win.start && e.t <= win.end);
-    const padSpans = spansOf(padState[E.padState] || [], (st) => st === 'running' || st === 'startup', win);
+    const padSpans = spansOf(padState[E.padState] || [], padMoving, win);
     const slouchSpans = spansOf(slouch[E.slouching] || [], (st) => st === 'on', win);
     const camSpans = spansOf(camera[E.camera] || [], (st) => st === 'on', win);
 
